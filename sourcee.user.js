@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      2.1
-// @description  The ultimate HTML export tool. (Slim UI)
+// @version      2.2
+// @description  The ultimate HTML export tool. (Slim UI + Visual Feedback)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
@@ -93,10 +93,22 @@
         background: rgba(255,255,255,0.08);
         color: #eee; cursor: pointer;
         text-align: center; font-weight: 600;
+        transition: all 0.2s;
       }
       .hx_btn.primary { background: rgba(80, 160, 255, 0.25); border-color: rgba(80, 160, 255, 0.4); color: #fff; }
       .hx_btn.danger { background: rgba(255,80,80,0.25); border-color: rgba(255,80,80,0.4); color: #ffcccc; }
       .hx_btn.disabled { opacity: 0.4; pointer-events: none; }
+
+      /* Processing State (The Visual Clue) */
+      .hx_btn.working {
+        background: rgba(255, 170, 0, 0.3) !important;
+        border-color: rgba(255, 170, 0, 0.6) !important;
+        color: #fff !important;
+        opacity: 1 !important;
+        pointer-events: none;
+        animation: hx_pulse 1.5s infinite ease-in-out;
+      }
+      @keyframes hx_pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
 
       /* Settings Row */
       .hx_settings { display: flex; align-items: center; justify-content: space-between; font-size: 11px; opacity: 0.8; padding: 0 4px; }
@@ -157,19 +169,21 @@
       const doc = new DOMParser().parseFromString(html,"text/html");
       const imgs = Array.from(doc.querySelectorAll("img")).filter(i=>!i.src.startsWith("data:"));
       const total = limit>0 ? Math.min(limit, imgs.length) : imgs.length;
+      
+      onProg(0, total); // Initial update
+      
       let count=0;
-
       for(const img of imgs) {
         if(count >= total) break;
         if(signal?.aborted) return {html:doc.documentElement.outerHTML, stopped:true};
         try {
           const abs = new URL(img.getAttribute("src"), location.href).href;
-          onProg(count+1, total);
           const b64 = await fetchBase64(abs, signal);
           img.setAttribute("src", b64);
           img.removeAttribute("srcset"); img.removeAttribute("loading");
         } catch(e) { console.warn(e); }
         count++;
+        onProg(count, total); // Update progress
       }
       return {html:doc.documentElement.outerHTML, stopped:false};
     }
@@ -215,38 +229,39 @@
       partials: wrap.querySelector("#hx_partials"),
       saveP: wrap.querySelector("#hx_save_p"),
       discP: wrap.querySelector("#hx_disc_p"),
-      mainBtns: wrap.querySelector(".hx_row") // the start/stop row
+      mainBtns: wrap.querySelector(".hx_row")
     };
 
     els.name.value = sanitize(location.hostname + location.pathname);
     let useTs = true;
-    let ac = null; // AbortController
+    let ac = null;
     let partialRes = null;
 
-    // Toggle Menu
     els.fab.onclick = () => els.menu.classList.toggle("show");
-    
-    // Toggle Timestamp
     els.ts.onclick = () => { useTs=!useTs; els.ts.textContent = `Time: ${useTs?"ON":"OFF"}`; };
 
     function getFN(suffix) {
       return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`;
     }
 
-    function toggleControls(running) {
-      if(running) {
-        els.start.classList.add("disabled");
-        els.stop.classList.remove("disabled");
-        els.mode.disabled = true;
-      } else {
-        els.start.classList.remove("disabled");
-        els.stop.classList.add("disabled");
-        els.mode.disabled = false;
-        els.start.textContent = "Start";
-      }
+    function toggleControls(state) {
+        if (state === "running") {
+            els.stop.classList.remove("disabled");
+            els.mode.disabled = true;
+            // Note: We don't disable start here, we rely on the specific mode logic to style it
+        } else {
+            els.start.classList.remove("disabled");
+            els.start.classList.remove("working"); // Remove pulse
+            els.start.textContent = "Start";
+            els.stop.classList.add("disabled");
+            els.mode.disabled = false;
+        }
     }
 
     els.start.onclick = async () => {
+      // Prevent double clicks if already working
+      if (els.start.classList.contains("working") || els.start.classList.contains("disabled")) return;
+
       const mode = els.mode.value;
       const lim = parseInt(els.limit.value)||0;
       
@@ -259,11 +274,16 @@
           toast("Beautifying..."); dl(beautify(await fetchTxt(location.href)), getFN("pretty"));
         } else if(mode === "self") {
           ac = new AbortController();
-          toggleControls(true);
-          toast("Processing Images...");
+          toggleControls("running");
           
+          // Apply specific "working" style to Start button
+          els.start.classList.add("working");
+          els.start.textContent = "Prep...";
+
           const raw = document.documentElement.outerHTML;
-          const res = await processImages(raw, lim, ac.signal, (c,t) => els.start.textContent = `${c}/${t}`);
+          const res = await processImages(raw, lim, ac.signal, (c,t) => {
+              els.start.textContent = `Img ${c}/${t}`;
+          });
           
           if(res.stopped) {
              partialRes = res.html;
@@ -273,35 +293,30 @@
           } else {
              dl(res.html, getFN("self"));
              toast("Done!");
-             toggleControls(false);
+             toggleControls("idle");
           }
         }
       } catch(e) {
         toast("Error: " + e.message);
-        toggleControls(false);
+        toggleControls("idle");
       }
     };
 
     els.stop.onclick = () => ac?.abort();
 
-    els.saveP.onclick = () => {
-      if(partialRes) dl(partialRes, getFN("partial"));
-      resetPartials();
-    };
+    els.saveP.onclick = () => { if(partialRes) dl(partialRes, getFN("partial")); resetPartials(); };
     els.discP.onclick = resetPartials;
 
     function resetPartials() {
       partialRes = null; ac = null;
       els.partials.style.display = "none";
       els.mainBtns.style.display = "flex";
-      toggleControls(false);
+      toggleControls("idle");
     }
 
-    // Draggable Logic (Mobile Friendly)
+    // Draggable Logic
     let isDrag = false, startX, startY, sL, sT;
     const store = "hx_pos_"+location.hostname;
-    
-    // Restore Pos
     try { const p=JSON.parse(localStorage.getItem(store)); if(p) { wrap.style.left=p.x+"px"; wrap.style.top=p.y+"px"; wrap.style.right="auto"; wrap.style.bottom="auto"; } } catch(_){}
 
     els.fab.addEventListener("pointerdown", e => {
@@ -319,9 +334,8 @@
     els.fab.addEventListener("pointerup", e => {
       els.fab.releasePointerCapture(e.pointerId);
       if(isDrag) localStorage.setItem(store, JSON.stringify({x:parseFloat(wrap.style.left), y:parseFloat(wrap.style.top)}));
-      else els.menu.classList.toggle("show"); // Click behavior
+      else els.menu.classList.toggle("show");
     });
-    // Override click to prevent double firing with pointer events
     els.fab.onclick = null; 
   }
 })();
