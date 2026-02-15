@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      2.0
-// @description  The ultimate HTML export tool. (Mobile Fixed)
+// @version      2.1
+// @description  The ultimate HTML export tool. (Slim UI)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
@@ -12,20 +12,14 @@
 (function () {
   "use strict";
 
-  // 1. Safe Start Check
   function initSourcee() {
-    if (!document.body) {
-      setTimeout(initSourcee, 100);
-      return;
-    }
+    if (!document.body) { setTimeout(initSourcee, 100); return; }
     runScript();
   }
 
-  // Shim GM_addStyle if missing (sometimes happens in weird contexts)
   function safeAddStyle(css) {
-    if (typeof GM_addStyle !== "undefined") {
-      GM_addStyle(css);
-    } else {
+    if (typeof GM_addStyle !== "undefined") { GM_addStyle(css); }
+    else {
       const style = document.createElement("style");
       style.textContent = css;
       document.head.appendChild(style);
@@ -39,534 +33,295 @@
     safeAddStyle(`
       #hx_wrap {
         position: fixed;
-        right: 12px;
-        bottom: 80px; /* Moved up slightly for mobile nav bars */
+        right: 12px; bottom: 80px;
         z-index: 2147483647;
         font: 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
         color: #fff;
         user-select: none;
-        touch-action: none; /* Crucial for mobile dragging */
-        -webkit-user-select: none;
+        touch-action: none;
         max-width: 100vw;
       }
-
       #hx_fab {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 14px; /* Larger touch target */
+        display: inline-flex; align-items: center; gap: 8px;
+        padding: 10px 14px;
         border-radius: 24px;
         border: 1px solid rgba(255,255,255,0.18);
         background: rgba(20,20,20,0.85);
-        backdrop-filter: blur(8px);
-        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.4);
         cursor: pointer;
-        transition: transform 0.1s;
       }
-      #hx_fab:active { transform: scale(0.96); }
-
-      #hx_drag_hint {
-        opacity: 0.6;
-        font-size: 11px;
-        margin-left: 2px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
       #hx_menu {
-        margin-top: 12px;
-        width: min(340px, 92vw);
-        border-radius: 18px;
+        margin-top: 12px; width: min(300px, 90vw);
+        border-radius: 16px;
         border: 1px solid rgba(255,255,255,0.14);
-        background: rgba(25,25,25,0.95); /* More opaque for mobile readability */
-        backdrop-filter: blur(12px);
-        -webkit-backdrop-filter: blur(12px);
+        background: rgba(25,25,25,0.95);
+        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
         box-shadow: 0 16px 40px rgba(0,0,0,0.6);
-        padding: 14px;
+        padding: 12px;
         display: none;
-        transform-origin: bottom right;
-        animation: hx_fade 0.2s ease-out;
+        flex-direction: column; gap: 10px;
       }
-      #hx_menu.show { display: block; }
-      
-      @keyframes hx_fade {
-        from { opacity: 0; transform: scale(0.95) translateY(10px); }
-        to { opacity: 1; transform: scale(1) translateY(0); }
-      }
+      #hx_menu.show { display: flex; }
 
-      .hx_row {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin: 10px 0;
-      }
-
-      .hx_btn {
-        flex: 1;
-        min-width: 100px;
-        padding: 11px 10px; /* Taller for touch */
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.12);
-        background: rgba(255,255,255,0.06);
-        color: #eee;
-        cursor: pointer;
-        text-align: center;
-        font-weight: 500;
+      /* Inputs */
+      .hx_field, .hx_select {
+        width: 100%; box-sizing: border-box;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.15);
+        background: rgba(0,0,0,0.3);
+        color: #fff; outline: none;
         font-size: 13px;
       }
-      .hx_btn:active { background: rgba(255,255,255,0.15); }
-      
-      .hx_btn.primary {
-        background: rgba(80, 160, 255, 0.2);
-        border-color: rgba(80, 160, 255, 0.3);
-        color: #fff;
+      .hx_select {
+        appearance: none;
+        background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        background-size: 10px;
+        padding-right: 30px;
       }
-      .hx_btn.danger {
-        background: rgba(255,80,80,0.15);
-        border-color: rgba(255,80,80,0.25);
-        color: #ffcccc;
-      }
-      .hx_btn.disabled {
-        opacity: 0.4;
-        pointer-events: none;
-      }
+      .hx_select option { background: #333; }
 
-      .hx_field {
-        width: 100%;
-        box-sizing: border-box;
-        padding: 10px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.15);
-        background: rgba(0,0,0,0.3);
-        color: #fff;
-        outline: none;
-        font-family: monospace;
+      /* Buttons */
+      .hx_row { display: flex; gap: 8px; }
+      .hx_btn {
+        flex: 1; padding: 10px;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.08);
+        color: #eee; cursor: pointer;
+        text-align: center; font-weight: 600;
       }
+      .hx_btn.primary { background: rgba(80, 160, 255, 0.25); border-color: rgba(80, 160, 255, 0.4); color: #fff; }
+      .hx_btn.danger { background: rgba(255,80,80,0.25); border-color: rgba(255,80,80,0.4); color: #ffcccc; }
+      .hx_btn.disabled { opacity: 0.4; pointer-events: none; }
 
-      .hx_inline {
-        display: flex;
-        gap: 10px;
-        align-items: center;
-        flex-wrap: wrap;
-      }
+      /* Settings Row */
+      .hx_settings { display: flex; align-items: center; justify-content: space-between; font-size: 11px; opacity: 0.8; padding: 0 4px; }
+      .hx_tiny_inp { width: 50px; padding: 4px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #fff; text-align: center; }
+      .hx_clickable { cursor: pointer; text-decoration: underline; }
 
-      .hx_num {
-        width: 70px;
-        padding: 8px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.15);
-        background: rgba(0,0,0,0.3);
-        color: #fff;
-        text-align: center;
-      }
-
-      .hx_toggle {
-        display: inline-flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 10px;
-        padding: 8px 12px;
-        border-radius: 10px;
-        border: 1px solid rgba(255,255,255,0.14);
-        background: rgba(255,255,255,0.06);
-        cursor: pointer;
-        min-width: 110px;
-      }
-
+      /* Toast */
       #hx_toast {
-        position: fixed;
-        left: 50%;
-        bottom: 100px;
-        transform: translateX(-50%) translateY(20px);
-        z-index: 2147483647;
-        padding: 10px 16px;
-        border-radius: 20px;
-        background: rgba(20,20,20,0.9);
-        border: 1px solid rgba(255,255,255,0.1);
-        backdrop-filter: blur(4px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        opacity: 0;
-        transition: opacity .2s ease, transform .2s ease;
-        pointer-events: none;
-        max-width: 80vw;
-        text-align: center;
-        color: #ff5555;
-        font-weight: 600;
+        position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%) translateY(20px);
+        z-index: 2147483647; padding: 10px 16px; border-radius: 20px;
+        background: rgba(20,20,20,0.9); border: 1px solid rgba(255,255,255,0.1);
+        backdrop-filter: blur(4px); opacity: 0; pointer-events: none;
+        transition: opacity .2s, transform .2s; color: #fff; font-weight: 600;
       }
       #hx_toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-      /* Cancel decision bar */
-      #hx_cancel_bar {
-        display: none;
-        margin-top: 10px;
-        padding: 12px;
-        border-radius: 12px;
-        border: 1px solid rgba(255,80,80,0.3);
-        background: rgba(40,10,10,0.5);
-      }
-      #hx_cancel_bar.show { display: block; }
-
-      .hx_small { font-size: 11px; opacity: 0.7; margin-bottom: 4px; }
-      .hx_hr { height: 1px; background: rgba(255,255,255,0.1); margin: 12px 0; }
     `);
 
-    // ---------- Helpers ----------
+    // ---------- Utilities ----------
     function toast(msg) {
       let el = document.getElementById("hx_toast");
-      if (!el) {
-        el = document.createElement("div");
-        el.id = "hx_toast";
-        document.body.appendChild(el);
+      if (!el) { el = document.createElement("div"); el.id = "hx_toast"; document.body.appendChild(el); }
+      el.textContent = msg; el.classList.add("show");
+      clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 2500);
+    }
+    function sanitize(s) { return (s||"page").replace(/^https?:\/\//i,"").replace(/[^\w.\-]+/g,"_").slice(0,120); }
+    function ts() { const d=new Date(), p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}`; }
+    function dl(txt, name) {
+      const b=new Blob([txt],{type:"text/html"}), u=URL.createObjectURL(b), a=document.createElement("a");
+      a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),2000);
+    }
+    async function fetchTxt(url) {
+      const r = await fetch(url, {cache:"no-store", credentials:"include"});
+      if(!r.ok) throw new Error(r.status); return await r.text();
+    }
+    function beautify(html) {
+      const t = (html||"").replace(/>\s+</g,">\n<").replace(/\n{3,}/g,"\n\n");
+      let i=0,out=[];
+      for(const l of t.split("\n")) {
+        const tr=l.trim(); if(!tr) continue;
+        if(/^<\/[^>]+>/.test(tr)) i=Math.max(0,i-1);
+        out.push("  ".repeat(i)+tr);
+        if(/^<[^!/][^>]*[^/]>$/.test(tr) && !/^<(script|style|meta|link|img|br|hr)/i.test(tr)) i++;
       }
-      el.textContent = msg;
-      el.classList.add("show");
-      clearTimeout(el._t);
-      el._t = setTimeout(() => el.classList.remove("show"), 2500);
+      return out.join("\n");
     }
 
-    function sanitizeName(s) {
-      return (s || "page")
-        .replace(/^https?:\/\//i, "")
-        .replace(/[^\w.\-]+/g, "_")
-        .replace(/_+/g, "_")
-        .replace(/^_+|_+$/g, "")
-        .slice(0, 140);
-    }
-
-    function tsStamp() {
-      const d = new Date();
-      const pad = (n) => String(n).padStart(2, "0");
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
-    }
-
-    function downloadText(text, filename) {
-      const blob = new Blob([text], { type: "text/html" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 2000);
-    }
-
-    async function fetchTextNoStore(url) {
-      const res = await fetch(url, { cache: "no-store", credentials: "include" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return await res.text();
-    }
-
-    function makeCancelToken() {
-      return {
-        canceled: false,
-        controller: (typeof AbortController !== "undefined") ? new AbortController() : null,
-        cancel() {
-          this.canceled = true;
-          try { this.controller?.abort(); } catch (_) {}
-        }
-      };
-    }
-
-    async function fetchAsDataURL(url, cancelToken) {
-      if (cancelToken?.canceled) throw new Error("CANCELED");
-      const init = { cache: "no-store", credentials: "include" };
-      if (cancelToken?.controller) init.signal = cancelToken.controller.signal;
-
-      const res = await fetch(url, init);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      return await new Promise((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve({ dataUrl: r.result, mime: blob.type });
-        r.onerror = reject;
-        r.readAsDataURL(blob);
+    // ---------- Self-Contained Logic ----------
+    async function fetchBase64(url, signal) {
+      if(signal?.aborted) throw new Error("STOP");
+      const r = await fetch(url, {signal, cache:"no-store"});
+      const b = await r.blob();
+      return new Promise((res,rej)=>{
+        const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(b);
       });
     }
 
-    function absolutizeUrl(baseUrl, maybeRelative) {
-      try { return new URL(maybeRelative, baseUrl).toString(); }
-      catch { return null; }
-    }
+    async function processImages(html, limit, signal, onProg) {
+      const doc = new DOMParser().parseFromString(html,"text/html");
+      const imgs = Array.from(doc.querySelectorAll("img")).filter(i=>!i.src.startsWith("data:"));
+      const total = limit>0 ? Math.min(limit, imgs.length) : imgs.length;
+      let count=0;
 
-    function pickSrcsetBest(srcset, baseUrl) {
-      if (!srcset) return null;
-      const parts = srcset.split(",").map(s => s.trim()).filter(Boolean);
-      if (!parts.length) return null;
-      let best = null, bestScore = -1;
-      for (const p of parts) {
-        const [u, descriptor] = p.split(/\s+/);
-        const abs = absolutizeUrl(baseUrl, u);
-        if (!abs) continue;
-        let score = 0;
-        if (descriptor) {
-            const mW = descriptor.match(/^(\d+)w$/);
-            const mX = descriptor.match(/^(\d+(\.\d+)?)x$/);
-            if (mW) score = parseInt(mW[1], 10);
-            else if (mX) score = Math.round(parseFloat(mX[1]) * 1000);
-        }
-        if (score > bestScore) { bestScore = score; best = abs; }
-        if (bestScore < 0) best = abs; 
-      }
-      return best;
-    }
-
-    async function makeSelfContainedHTML(baseUrl, htmlText, cancelToken, embedLimit, onProgress) {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(htmlText, "text/html");
-      const imgs = Array.from(doc.querySelectorAll("img")).filter(img => {
-          const src = img.getAttribute("src") || "";
-          return !src.startsWith("data:");
-      });
-
-      if (!imgs.length) {
-        return { html: "<!doctype html>\n" + doc.documentElement.outerHTML, embedded: 0, failed: 0, canceled: false, total: 0, processed: 0 };
-      }
-
-      const cache = new Map();
-      let embedded = 0, failed = 0, processed = 0;
-      const maxToProcess = (embedLimit && embedLimit > 0) ? Math.min(embedLimit, imgs.length) : imgs.length;
-
-      for (let i = 0; i < imgs.length; i++) {
-        if (processed >= maxToProcess) break;
-        if (cancelToken?.canceled) return { html: "<!doctype html>\n" + doc.documentElement.outerHTML, embedded, failed, canceled: true, total: maxToProcess, processed };
-
-        const img = imgs[i];
-        const curSrc = img.getAttribute("src") || "";
-        const srcset = img.getAttribute("srcset");
-        const target = pickSrcsetBest(srcset, baseUrl) || absolutizeUrl(baseUrl, curSrc);
-        
-        if (!target) { failed++; processed++; continue; }
-        onProgress?.(processed + 1, maxToProcess, target);
-
+      for(const img of imgs) {
+        if(count >= total) break;
+        if(signal?.aborted) return {html:doc.documentElement.outerHTML, stopped:true};
         try {
-          let dataUrl = cache.get(target);
-          if (!dataUrl) {
-            const r = await fetchAsDataURL(target, cancelToken);
-            dataUrl = r.dataUrl;
-            cache.set(target, dataUrl);
-          }
-          img.setAttribute("src", dataUrl);
-          img.removeAttribute("srcset");
-          img.removeAttribute("loading");
-          embedded++;
-        } catch (e) {
-          if (String(e?.message || e).includes("CANCELED") || cancelToken?.canceled) {
-            return { html: "<!doctype html>\n" + doc.documentElement.outerHTML, embedded, failed, canceled: true, total: maxToProcess, processed };
-          }
-          failed++;
-        } finally {
-          processed++;
-        }
+          const abs = new URL(img.getAttribute("src"), location.href).href;
+          onProg(count+1, total);
+          const b64 = await fetchBase64(abs, signal);
+          img.setAttribute("src", b64);
+          img.removeAttribute("srcset"); img.removeAttribute("loading");
+        } catch(e) { console.warn(e); }
+        count++;
       }
-      return { html: "<!doctype html>\n" + doc.documentElement.outerHTML, embedded, failed, canceled: false, total: maxToProcess, processed };
+      return {html:doc.documentElement.outerHTML, stopped:false};
     }
 
-    function beautifyHTML(html) {
-      const text = (html || "").replace(/\r\n/g, "\n").replace(/>\s+</g, ">\n<").replace(/\n{3,}/g, "\n\n");
-      const lines = text.split("\n");
-      let indent = 0;
-      const out = [];
-      for (const line of lines) {
-        const l = line.trim();
-        if (!l) continue;
-        if (/^<\/[^>]+>/.test(l)) indent = Math.max(0, indent - 1);
-        out.push("  ".repeat(indent) + l);
-        if (/^<[^!/][^>]*[^/]>$/.test(l) && !/^<[^>]+\/>$/.test(l) && !/^<(script|style|meta|link)/i.test(l)) indent++;
-      }
-      return out.join("\n") + "\n";
-    }
-
-    function defaultBaseName() {
-      return sanitizeName(location.hostname + location.pathname) || "page";
-    }
-
-    function space(h) { const d = document.createElement("div"); d.style.height = h + "px"; return d; }
-    function hr() { const d = document.createElement("div"); d.className = "hx_hr"; return d; }
-
-    // ---------- Build UI ----------
-    const wrap = document.createElement("div");
-    wrap.id = "hx_wrap";
-
-    const fab = document.createElement("div");
-    fab.id = "hx_fab";
-    fab.innerHTML = `<strong>Sourcee</strong><span id="hx_drag_hint">::</span>`;
-
-    const menu = document.createElement("div");
-    menu.id = "hx_menu";
-
-    // Inputs
-    const filenameInput = document.createElement("input");
-    filenameInput.className = "hx_field";
-    filenameInput.value = defaultBaseName();
-
-    let addTimestamp = true;
-    const toggleTs = document.createElement("div");
-    toggleTs.className = "hx_toggle";
-    toggleTs.innerHTML = `<span>Time</span><strong id="hx_ts_state">ON</strong>`;
-    toggleTs.onclick = () => {
-        addTimestamp = !addTimestamp;
-        toggleTs.querySelector("#hx_ts_state").textContent = addTimestamp ? "ON" : "OFF";
-    };
-
-    const limitInput = document.createElement("input");
-    limitInput.className = "hx_num";
-    limitInput.type = "number";
-    limitInput.value = "0";
-
-    // Buttons
-    const btnFetch = document.createElement("div"); btnFetch.className = "hx_btn primary"; btnFetch.textContent = "Fetch";
-    const btnDOM = document.createElement("div"); btnDOM.className = "hx_btn"; btnDOM.textContent = "DOM";
-    const btnPretty = document.createElement("div"); btnPretty.className = "hx_btn"; btnPretty.textContent = "Pretty";
-    const btnSelf = document.createElement("div"); btnSelf.className = "hx_btn"; btnSelf.textContent = "Self-Contained";
-    const btnCancel = document.createElement("div"); btnCancel.className = "hx_btn danger disabled"; btnCancel.textContent = "Stop";
-    const btnClose = document.createElement("div"); btnClose.className = "hx_btn danger"; btnClose.textContent = "Close";
-
-    // Rows
-    const row1 = document.createElement("div"); row1.className = "hx_row";
-    row1.append(btnFetch, btnDOM, btnPretty);
-    const row2 = document.createElement("div"); row2.className = "hx_row";
-    row2.append(btnSelf, btnCancel);
-    const row3 = document.createElement("div"); row3.className = "hx_row";
-    row3.append(btnClose);
-
-    // Cancel Bar
-    const cancelBar = document.createElement("div"); cancelBar.id = "hx_cancel_bar";
-    const btnSaveP = document.createElement("div"); btnSaveP.className = "hx_btn primary"; btnSaveP.textContent = "Save Partial";
-    const btnDiscP = document.createElement("div"); btnDiscP.className = "hx_btn danger"; btnDiscP.textContent = "Discard";
-    const cRow = document.createElement("div"); cRow.className = "hx_row";
-    cRow.append(btnSaveP, btnDiscP);
-    cancelBar.append(document.createTextNode("Stopped."), cRow);
-
-    // Assemble
-    const title = document.createElement("div"); title.innerHTML = "<b>Sourcee</b> Options";
-    menu.append(title, space(8), filenameInput, space(8));
-    
-    const settingsRow = document.createElement("div"); settingsRow.className = "hx_inline";
-    settingsRow.append(toggleTs, document.createTextNode("Limit:"), limitInput);
-    menu.append(settingsRow, hr(), row1, row2, cancelBar, row3);
-
-    wrap.append(fab, menu);
-    
-    // IMPORTANT: Append to BODY, not DocumentElement
+    // ---------- UI Construction ----------
+    const wrap = document.createElement("div"); wrap.id="hx_wrap";
+    wrap.innerHTML = `
+      <div id="hx_fab">Sourcee <span>▾</span></div>
+      <div id="hx_menu">
+        <input id="hx_name" class="hx_field" placeholder="Filename">
+        <select id="hx_mode" class="hx_select">
+          <option value="fetch">Fetch Source</option>
+          <option value="dom">DOM Snapshot</option>
+          <option value="pretty">Beautify Fetch</option>
+          <option value="self">Self-Contained (Img)</option>
+        </select>
+        <div class="hx_row">
+          <div id="hx_start" class="hx_btn primary">Start</div>
+          <div id="hx_stop" class="hx_btn danger disabled">Stop</div>
+        </div>
+        <div class="hx_settings">
+          <label>Limit: <input id="hx_limit" type="number" class="hx_tiny_inp" value="0"></label>
+          <span id="hx_ts" class="hx_clickable">Time: ON</span>
+        </div>
+        <div id="hx_partials" class="hx_row" style="display:none">
+          <div id="hx_save_p" class="hx_btn primary">Save Partial</div>
+          <div id="hx_disc_p" class="hx_btn danger">Discard</div>
+        </div>
+      </div>
+    `;
     document.body.appendChild(wrap);
 
-    // Load Position
-    const POS_KEY = "hx_pos_" + location.hostname;
-    try {
-        const saved = JSON.parse(localStorage.getItem(POS_KEY));
-        if (saved) {
-            wrap.style.left = saved.x + "px";
-            wrap.style.top = saved.y + "px";
-            wrap.style.right = "auto";
-            wrap.style.bottom = "auto";
-        }
-    } catch (_) {}
+    // ---------- Logic Binding ----------
+    const els = {
+      fab: wrap.querySelector("#hx_fab"),
+      menu: wrap.querySelector("#hx_menu"),
+      name: wrap.querySelector("#hx_name"),
+      mode: wrap.querySelector("#hx_mode"),
+      start: wrap.querySelector("#hx_start"),
+      stop: wrap.querySelector("#hx_stop"),
+      limit: wrap.querySelector("#hx_limit"),
+      ts: wrap.querySelector("#hx_ts"),
+      partials: wrap.querySelector("#hx_partials"),
+      saveP: wrap.querySelector("#hx_save_p"),
+      discP: wrap.querySelector("#hx_disc_p"),
+      mainBtns: wrap.querySelector(".hx_row") // the start/stop row
+    };
 
-    // Event Logic
-    function buildFN(suf) {
-        return `${filenameInput.value}${suf ? "_"+suf : ""}${addTimestamp ? "_"+tsStamp() : ""}.html`;
+    els.name.value = sanitize(location.hostname + location.pathname);
+    let useTs = true;
+    let ac = null; // AbortController
+    let partialRes = null;
+
+    // Toggle Menu
+    els.fab.onclick = () => els.menu.classList.toggle("show");
+    
+    // Toggle Timestamp
+    els.ts.onclick = () => { useTs=!useTs; els.ts.textContent = `Time: ${useTs?"ON":"OFF"}`; };
+
+    function getFN(suffix) {
+      return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`;
     }
 
-    let activeToken = null;
-    let partialHTML = null;
-
-    btnFetch.onclick = async () => {
-        toast("Fetching...");
-        try { downloadText(await fetchTextNoStore(location.href), buildFN("source")); }
-        catch(e) { toast("Err: " + e.message); }
-    };
-    btnDOM.onclick = () => {
-        downloadText("<!doctype html>\n" + document.documentElement.outerHTML, buildFN("dom"));
-        toast("DOM Saved");
-    };
-    btnPretty.onclick = async () => {
-        toast("Prettifying...");
-        try { downloadText(beautifyHTML(await fetchTextNoStore(location.href)), buildFN("pretty")); }
-        catch(e) { toast("Err: " + e.message); }
-    };
-
-    btnSelf.onclick = async () => {
-        if (activeToken) return;
-        activeToken = makeCancelToken();
-        partialHTML = null;
-        btnSelf.classList.add("disabled");
-        btnCancel.classList.remove("disabled");
-        
-        try {
-            const res = await makeSelfContainedHTML(location.href, document.documentElement.outerHTML, activeToken, parseInt(limitInput.value)||0, (c,t)=>btnSelf.textContent=`${c}/${t}`);
-            if (res.canceled) {
-                partialHTML = res.html;
-                cancelBar.classList.add("show");
-            } else {
-                downloadText(res.html, buildFN("self"));
-                toast(`Done: ${res.embedded} imgs`);
-                resetSelf();
-            }
-        } catch (e) { toast("Err: " + e.message); resetSelf(); }
-    };
-
-    btnCancel.onclick = () => activeToken?.cancel();
-    
-    function resetSelf() {
-        activeToken = null;
-        btnSelf.textContent = "Self-Contained";
-        btnSelf.classList.remove("disabled");
-        btnCancel.classList.add("disabled");
+    function toggleControls(running) {
+      if(running) {
+        els.start.classList.add("disabled");
+        els.stop.classList.remove("disabled");
+        els.mode.disabled = true;
+      } else {
+        els.start.classList.remove("disabled");
+        els.stop.classList.add("disabled");
+        els.mode.disabled = false;
+        els.start.textContent = "Start";
+      }
     }
 
-    btnSaveP.onclick = () => {
-        if(partialHTML) downloadText(partialHTML, buildFN("partial"));
-        cancelBar.classList.remove("show");
-        resetSelf();
-    };
-    btnDiscP.onclick = () => {
-        cancelBar.classList.remove("show");
-        resetSelf();
-    };
-
-    btnClose.onclick = () => menu.classList.remove("show");
-
-    // Toggle Menu (Smart)
-    let moved = 0;
-    fab.onclick = () => {
-        if (moved < 5) menu.classList.toggle("show");
-    };
-
-    // Robust Dragging for Mobile
-    let startX = 0, startY = 0, startLeft = 0, startTop = 0;
-    fab.addEventListener("pointerdown", (e) => {
-        if (e.button !== 0) return;
-        fab.setPointerCapture(e.pointerId);
-        startX = e.clientX; startY = e.clientY;
-        const r = wrap.getBoundingClientRect();
-        startLeft = r.left; startTop = r.top;
-        moved = 0;
-        
-        // Reset to left/top positioning
-        wrap.style.right = "auto";
-        wrap.style.bottom = "auto";
-        wrap.style.left = startLeft + "px";
-        wrap.style.top = startTop + "px";
-    });
-    
-    fab.addEventListener("pointermove", (e) => {
-        if (!fab.hasPointerCapture(e.pointerId)) return;
-        const dx = e.clientX - startX;
-        const dy = e.clientY - startY;
-        moved += Math.abs(dx) + Math.abs(dy);
-        
-        wrap.style.left = (startLeft + dx) + "px";
-        wrap.style.top = (startTop + dy) + "px";
-    });
-    
-    fab.addEventListener("pointerup", (e) => {
-        fab.releasePointerCapture(e.pointerId);
-        if (moved > 5) {
-            const r = wrap.getBoundingClientRect();
-            localStorage.setItem(POS_KEY, JSON.stringify({x: r.left, y: r.top}));
+    els.start.onclick = async () => {
+      const mode = els.mode.value;
+      const lim = parseInt(els.limit.value)||0;
+      
+      try {
+        if(mode === "fetch") {
+          toast("Fetching..."); dl(await fetchTxt(location.href), getFN("source"));
+        } else if(mode === "dom") {
+          toast("Snapshotting..."); dl("<!doctype html>\n"+document.documentElement.outerHTML, getFN("dom"));
+        } else if(mode === "pretty") {
+          toast("Beautifying..."); dl(beautify(await fetchTxt(location.href)), getFN("pretty"));
+        } else if(mode === "self") {
+          ac = new AbortController();
+          toggleControls(true);
+          toast("Processing Images...");
+          
+          const raw = document.documentElement.outerHTML;
+          const res = await processImages(raw, lim, ac.signal, (c,t) => els.start.textContent = `${c}/${t}`);
+          
+          if(res.stopped) {
+             partialRes = res.html;
+             els.mainBtns.style.display = "none";
+             els.partials.style.display = "flex";
+             toast("Stopped.");
+          } else {
+             dl(res.html, getFN("self"));
+             toast("Done!");
+             toggleControls(false);
+          }
         }
+      } catch(e) {
+        toast("Error: " + e.message);
+        toggleControls(false);
+      }
+    };
+
+    els.stop.onclick = () => ac?.abort();
+
+    els.saveP.onclick = () => {
+      if(partialRes) dl(partialRes, getFN("partial"));
+      resetPartials();
+    };
+    els.discP.onclick = resetPartials;
+
+    function resetPartials() {
+      partialRes = null; ac = null;
+      els.partials.style.display = "none";
+      els.mainBtns.style.display = "flex";
+      toggleControls(false);
+    }
+
+    // Draggable Logic (Mobile Friendly)
+    let isDrag = false, startX, startY, sL, sT;
+    const store = "hx_pos_"+location.hostname;
+    
+    // Restore Pos
+    try { const p=JSON.parse(localStorage.getItem(store)); if(p) { wrap.style.left=p.x+"px"; wrap.style.top=p.y+"px"; wrap.style.right="auto"; wrap.style.bottom="auto"; } } catch(_){}
+
+    els.fab.addEventListener("pointerdown", e => {
+      if(e.button!==0)return; els.fab.setPointerCapture(e.pointerId);
+      isDrag=false; startX=e.clientX; startY=e.clientY;
+      const r=wrap.getBoundingClientRect(); sL=r.left; sT=r.top;
+      wrap.style.right="auto"; wrap.style.bottom="auto"; wrap.style.left=sL+"px"; wrap.style.top=sT+"px";
     });
+    els.fab.addEventListener("pointermove", e => {
+      if(!els.fab.hasPointerCapture(e.pointerId)) return;
+      const dx=e.clientX-startX, dy=e.clientY-startY;
+      if(Math.abs(dx)+Math.abs(dy)>5) isDrag=true;
+      wrap.style.left=(sL+dx)+"px"; wrap.style.top=(sT+dy)+"px";
+    });
+    els.fab.addEventListener("pointerup", e => {
+      els.fab.releasePointerCapture(e.pointerId);
+      if(isDrag) localStorage.setItem(store, JSON.stringify({x:parseFloat(wrap.style.left), y:parseFloat(wrap.style.top)}));
+      else els.menu.classList.toggle("show"); // Click behavior
+    });
+    // Override click to prevent double firing with pointer events
+    els.fab.onclick = null; 
   }
 })();
