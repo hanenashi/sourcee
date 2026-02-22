@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      3.6
-// @description  The ultimate HTML export tool. (UI Scaling + Safe Auth + AI Dump)
+// @version      3.7
+// @description  The ultimate HTML export tool. (Smart AI Dump labeling + UI Scaling + Safe Auth)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
@@ -83,7 +83,6 @@
         color: #fff; outline: none; font-size: calc(13px * var(--hx_scale));
       }
       
-      /* Plain appearance auto to avoid SVG rendering bugs */
       .hx_select { appearance: auto; }
       .hx_select option { background: #333; }
 
@@ -195,12 +194,45 @@
     async function buildDevDump(onProg) {
         let md = `# AI DEV DUMP: ${location.href}\n\n`;
 
-        // 1. Injected/Inline Styles
+        // 1. Injected/Inline Styles (Now with heuristics!)
         md += `## 1. INLINE & INJECTED STYLES (<style>)\n`;
         const styles = document.querySelectorAll("style");
         styles.forEach((s, i) => {
             const css = s.textContent.trim();
-            if (css) md += `\n### Style Block ${i + 1}\n\`\`\`css\n${css}\n\`\`\`\n`;
+            if (css) {
+                // 1. Gather identifying attributes (id, class, data-*)
+                let ident = [];
+                if (s.id) ident.push(`id="${s.id}"`);
+                if (s.className) ident.push(`class="${s.className}"`);
+                Array.from(s.attributes).forEach(attr => {
+                    if (attr.name.startsWith('data-')) ident.push(`${attr.name}="${attr.value}"`);
+                });
+
+                let attrString = ident.length > 0 ? ` [${ident.join(", ")}]` : " [Anonymous/Inline]";
+
+                // 2. Heuristics: Guess the origin based on attributes or CSS content
+                let origin = "Vanilla Site / Unknown";
+                let originTag = "";
+                
+                if (s.id && s.id.toLowerCase().includes("stylus")) {
+                    origin = "Stylus Theme";
+                    originTag = "🎨 ";
+                } else if (s.className && s.className.toLowerCase().includes("stylus")) {
+                    origin = "Stylus Theme";
+                    originTag = "🎨 ";
+                } else if (css.includes("display: none !important") && css.length > 500) {
+                    origin = "AdBlocker / Anti-Tracker";
+                    originTag = "🛡️ ";
+                } else if (css.includes("--hx_scale")) {
+                    origin = "Sourcee Userscript";
+                    originTag = "⚙️ ";
+                } else if (s.parentElement && s.parentElement.tagName.toLowerCase() === 'body') {
+                    origin = "Injected into <body> (Likely Userscript)";
+                    originTag = "💉 ";
+                }
+
+                md += `\n### Style Block ${i + 1} - ${originTag}${origin}${attrString}\n\`\`\`css\n${css}\n\`\`\`\n`;
+            }
         });
 
         // 2. External Stylesheets
@@ -229,7 +261,6 @@
     // ---------- Self-Contained Logic ----------
     async function fetchBase64(url, signal) {
       if(signal?.aborted) throw new Error("STOP");
-      // Include credentials to fetch auth/paywalled images!
       const r = await fetch(url, {signal, cache:"no-store", credentials:"include"});
       const b = await r.blob();
       return new Promise((res,rej)=>{
@@ -252,7 +283,6 @@
           img.setAttribute("src", b64);
           img.removeAttribute("srcset"); img.removeAttribute("loading");
         } catch(e) { 
-          // Immediate abort on cancel
           if(signal?.aborted) return {html:doc.documentElement.outerHTML, stopped:true};
           console.warn(e); 
         }
@@ -415,10 +445,4 @@
       isDrag = false;
     });
 
-    els.fab.addEventListener("pointercancel", e => {
-      try { els.fab.releasePointerCapture(e.pointerId); } catch(err){}
-      isDrag = false;
-    });
-    
-  }
-})();
+    els.fab.addEventListener("pointercancel"
