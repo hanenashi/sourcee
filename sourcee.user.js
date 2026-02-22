@@ -220,7 +220,7 @@
                 } else if (s.className && s.className.toLowerCase().includes("stylus")) {
                     origin = "Stylus Theme";
                     originTag = "🎨 ";
-                } else if (css.includes("display: none !important") && css.length > 500) {
+                } else if (css.includes("display:none!important") && css.length > 500) {
                     origin = "AdBlocker / Anti-Tracker";
                     originTag = "🛡️ ";
                 } else if (css.includes("--hx_scale")) {
