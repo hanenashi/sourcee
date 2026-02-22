@@ -1,11 +1,12 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      2.2
-// @description  The ultimate HTML export tool. (Slim UI + Visual Feedback)
+// @version      3.0
+// @description  The ultimate HTML export tool. (Slim UI + AI Dev Dump)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
+// @grant        GM_xmlhttpRequest
 // @run-at       document-idle
 // ==/UserScript==
 
@@ -32,90 +33,58 @@
     // ---------- UI Styles ----------
     safeAddStyle(`
       #hx_wrap {
-        position: fixed;
-        right: 12px; bottom: 80px;
-        z-index: 2147483647;
-        font: 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        color: #fff;
-        user-select: none;
-        touch-action: none;
-        max-width: 100vw;
+        position: fixed; right: 12px; bottom: 80px; z-index: 2147483647;
+        font: 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: #fff;
+        user-select: none; touch-action: none; max-width: 100vw;
       }
       #hx_fab {
-        display: inline-flex; align-items: center; gap: 8px;
-        padding: 10px 14px;
-        border-radius: 24px;
-        border: 1px solid rgba(255,255,255,0.18);
-        background: rgba(20,20,20,0.85);
-        backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-        cursor: pointer;
+        display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px;
+        border-radius: 24px; border: 1px solid rgba(255,255,255,0.18);
+        background: rgba(20,20,20,0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.4); cursor: pointer;
       }
       #hx_menu {
-        margin-top: 12px; width: min(300px, 90vw);
-        border-radius: 16px;
-        border: 1px solid rgba(255,255,255,0.14);
-        background: rgba(25,25,25,0.95);
+        margin-top: 12px; width: min(300px, 90vw); border-radius: 16px;
+        border: 1px solid rgba(255,255,255,0.14); background: rgba(25,25,25,0.95);
         backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-        box-shadow: 0 16px 40px rgba(0,0,0,0.6);
-        padding: 12px;
-        display: none;
-        flex-direction: column; gap: 10px;
+        box-shadow: 0 16px 40px rgba(0,0,0,0.6); padding: 12px;
+        display: none; flex-direction: column; gap: 10px;
       }
       #hx_menu.show { display: flex; }
 
-      /* Inputs */
       .hx_field, .hx_select {
-        width: 100%; box-sizing: border-box;
-        padding: 10px;
-        border-radius: 8px;
-        border: 1px solid rgba(255,255,255,0.15);
-        background: rgba(0,0,0,0.3);
-        color: #fff; outline: none;
-        font-size: 13px;
+        width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.3);
+        color: #fff; outline: none; font-size: 13px;
       }
       .hx_select {
         appearance: none;
         background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
-        background-repeat: no-repeat;
-        background-position: right 10px center;
-        background-size: 10px;
-        padding-right: 30px;
+        background-repeat: no-repeat; background-position: right 10px center;
+        background-size: 10px; padding-right: 30px;
       }
       .hx_select option { background: #333; }
 
-      /* Buttons */
       .hx_row { display: flex; gap: 8px; }
       .hx_btn {
-        flex: 1; padding: 10px;
-        border-radius: 8px;
-        border: 1px solid rgba(255,255,255,0.12);
-        background: rgba(255,255,255,0.08);
-        color: #eee; cursor: pointer;
-        text-align: center; font-weight: 600;
-        transition: all 0.2s;
+        flex: 1; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.08); color: #eee; cursor: pointer;
+        text-align: center; font-weight: 600; transition: all 0.2s;
       }
       .hx_btn.primary { background: rgba(80, 160, 255, 0.25); border-color: rgba(80, 160, 255, 0.4); color: #fff; }
       .hx_btn.danger { background: rgba(255,80,80,0.25); border-color: rgba(255,80,80,0.4); color: #ffcccc; }
       .hx_btn.disabled { opacity: 0.4; pointer-events: none; }
-
-      /* Processing State (The Visual Clue) */
       .hx_btn.working {
-        background: rgba(255, 170, 0, 0.3) !important;
-        border-color: rgba(255, 170, 0, 0.6) !important;
-        color: #fff !important;
-        opacity: 1 !important;
-        pointer-events: none;
+        background: rgba(255, 170, 0, 0.3) !important; border-color: rgba(255, 170, 0, 0.6) !important;
+        color: #fff !important; opacity: 1 !important; pointer-events: none;
         animation: hx_pulse 1.5s infinite ease-in-out;
       }
       @keyframes hx_pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
 
-      /* Settings Row */
       .hx_settings { display: flex; align-items: center; justify-content: space-between; font-size: 11px; opacity: 0.8; padding: 0 4px; }
       .hx_tiny_inp { width: 50px; padding: 4px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #fff; text-align: center; }
       .hx_clickable { cursor: pointer; text-decoration: underline; }
 
-      /* Toast */
       #hx_toast {
         position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%) translateY(20px);
         z-index: 2147483647; padding: 10px 16px; border-radius: 20px;
@@ -136,13 +105,27 @@
     function sanitize(s) { return (s||"page").replace(/^https?:\/\//i,"").replace(/[^\w.\-]+/g,"_").slice(0,120); }
     function ts() { const d=new Date(), p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}`; }
     function dl(txt, name) {
-      const b=new Blob([txt],{type:"text/html"}), u=URL.createObjectURL(b), a=document.createElement("a");
+      const b=new Blob([txt],{type:"text/plain"}), u=URL.createObjectURL(b), a=document.createElement("a");
       a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),2000);
     }
     async function fetchTxt(url) {
       const r = await fetch(url, {cache:"no-store", credentials:"include"});
       if(!r.ok) throw new Error(r.status); return await r.text();
     }
+    
+    // Wrapped GM_xmlhttpRequest for cross-origin CSS fetching
+    function fetchCors(url) {
+        return new Promise((resolve, reject) => {
+            if (typeof GM_xmlhttpRequest === "undefined") return reject("GM_xmlhttpRequest not granted");
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: url,
+                onload: (res) => resolve(res.responseText),
+                onerror: (err) => reject(err)
+            });
+        });
+    }
+
     function beautify(html) {
       const t = (html||"").replace(/>\s+</g,">\n<").replace(/\n{3,}/g,"\n\n");
       let i=0,out=[];
@@ -153,6 +136,55 @@
         if(/^<[^!/][^>]*[^/]>$/.test(tr) && !/^<(script|style|meta|link|img|br|hr)/i.test(tr)) i++;
       }
       return out.join("\n");
+    }
+
+    // ---------- Dev Dump Logic ----------
+    function getCleanDOM() {
+        // Clone document to safely mutate without breaking the live page
+        const clone = document.documentElement.cloneNode(true);
+        // Strip heavy/unnecessary tags to save AI token limits
+        clone.querySelectorAll("script, noscript, iframe, canvas, video, audio, picture").forEach(e => e.remove());
+        clone.querySelectorAll("svg").forEach(e => { if (e.innerHTML.length > 200) e.innerHTML = ""; });
+        // Strip base64 images
+        clone.querySelectorAll("img, source").forEach(e => {
+            if (e.src && e.src.startsWith("data:")) e.removeAttribute("src");
+            if (e.srcset) e.removeAttribute("srcset");
+        });
+        return clone.outerHTML;
+    }
+
+    async function buildDevDump(onProg) {
+        let md = `# AI DEV DUMP: ${location.href}\n\n`;
+
+        // 1. Injected/Inline Styles
+        md += `## 1. INLINE & INJECTED STYLES (<style>)\n`;
+        const styles = document.querySelectorAll("style");
+        styles.forEach((s, i) => {
+            const css = s.textContent.trim();
+            if (css) md += `\n### Style Block ${i + 1}\n\`\`\`css\n${css}\n\`\`\`\n`;
+        });
+
+        // 2. External Stylesheets
+        md += `\n## 2. EXTERNAL STYLESHEETS (<link rel="stylesheet">)\n`;
+        const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+        for (let i = 0; i < links.length; i++) {
+            onProg(i + 1, links.length);
+            const href = links[i].href;
+            if (!href) continue;
+            md += `\n### Stylesheet: ${href}\n`;
+            try {
+                const cssText = await fetchCors(href);
+                md += `\`\`\`css\n${cssText.trim()}\n\`\`\`\n`;
+            } catch(e) {
+                md += `> [Failed to fetch: CORS or network error]\n`;
+            }
+        }
+
+        // 3. Cleaned DOM
+        md += `\n## 3. DOM SNAPSHOT (Sanitized for AI Context)\n`;
+        md += `\`\`\`html\n${beautify(getCleanDOM())}\n\`\`\`\n`;
+
+        return md;
     }
 
     // ---------- Self-Contained Logic ----------
@@ -169,9 +201,7 @@
       const doc = new DOMParser().parseFromString(html,"text/html");
       const imgs = Array.from(doc.querySelectorAll("img")).filter(i=>!i.src.startsWith("data:"));
       const total = limit>0 ? Math.min(limit, imgs.length) : imgs.length;
-      
-      onProg(0, total); // Initial update
-      
+      onProg(0, total);
       let count=0;
       for(const img of imgs) {
         if(count >= total) break;
@@ -182,8 +212,7 @@
           img.setAttribute("src", b64);
           img.removeAttribute("srcset"); img.removeAttribute("loading");
         } catch(e) { console.warn(e); }
-        count++;
-        onProg(count, total); // Update progress
+        count++; onProg(count, total);
       }
       return {html:doc.documentElement.outerHTML, stopped:false};
     }
@@ -195,10 +224,11 @@
       <div id="hx_menu">
         <input id="hx_name" class="hx_field" placeholder="Filename">
         <select id="hx_mode" class="hx_select">
-          <option value="fetch">Fetch Source</option>
-          <option value="dom">DOM Snapshot</option>
-          <option value="pretty">Beautify Fetch</option>
-          <option value="self">Self-Contained (Img)</option>
+          <option value="fetch">Fetch Source (.html)</option>
+          <option value="dom">DOM Snapshot (.html)</option>
+          <option value="pretty">Beautify Fetch (.html)</option>
+          <option value="self">Self-Contained Img (.html)</option>
+          <option value="devdump">AI Context Dump (.md)</option>
         </select>
         <div class="hx_row">
           <div id="hx_start" class="hx_btn primary">Start</div>
@@ -240,30 +270,22 @@
     els.fab.onclick = () => els.menu.classList.toggle("show");
     els.ts.onclick = () => { useTs=!useTs; els.ts.textContent = `Time: ${useTs?"ON":"OFF"}`; };
 
-    function getFN(suffix) {
-      return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`;
-    }
+    function getFN(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`; }
+    function getFNTxt(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.md`; }
 
     function toggleControls(state) {
         if (state === "running") {
-            els.stop.classList.remove("disabled");
-            els.mode.disabled = true;
-            // Note: We don't disable start here, we rely on the specific mode logic to style it
+            els.stop.classList.remove("disabled"); els.mode.disabled = true;
         } else {
-            els.start.classList.remove("disabled");
-            els.start.classList.remove("working"); // Remove pulse
+            els.start.classList.remove("disabled", "working");
             els.start.textContent = "Start";
-            els.stop.classList.add("disabled");
-            els.mode.disabled = false;
+            els.stop.classList.add("disabled"); els.mode.disabled = false;
         }
     }
 
     els.start.onclick = async () => {
-      // Prevent double clicks if already working
       if (els.start.classList.contains("working") || els.start.classList.contains("disabled")) return;
-
-      const mode = els.mode.value;
-      const lim = parseInt(els.limit.value)||0;
+      const mode = els.mode.value, lim = parseInt(els.limit.value)||0;
       
       try {
         if(mode === "fetch") {
@@ -272,53 +294,39 @@
           toast("Snapshotting..."); dl("<!doctype html>\n"+document.documentElement.outerHTML, getFN("dom"));
         } else if(mode === "pretty") {
           toast("Beautifying..."); dl(beautify(await fetchTxt(location.href)), getFN("pretty"));
-        } else if(mode === "self") {
-          ac = new AbortController();
+        } else if(mode === "devdump") {
           toggleControls("running");
-          
-          // Apply specific "working" style to Start button
           els.start.classList.add("working");
-          els.start.textContent = "Prep...";
-
-          const raw = document.documentElement.outerHTML;
-          const res = await processImages(raw, lim, ac.signal, (c,t) => {
-              els.start.textContent = `Img ${c}/${t}`;
-          });
+          els.start.textContent = "Scraping...";
           
+          const mdData = await buildDevDump((c,t) => { els.start.textContent = `CSS ${c}/${t}`; });
+          dl(mdData, getFNTxt("AI_CONTEXT"));
+          
+          toast("Dev Dump Saved!");
+          toggleControls("idle");
+        } else if(mode === "self") {
+          ac = new AbortController(); toggleControls("running");
+          els.start.classList.add("working"); els.start.textContent = "Prep...";
+
+          const res = await processImages(document.documentElement.outerHTML, lim, ac.signal, (c,t) => els.start.textContent = `Img ${c}/${t}`);
           if(res.stopped) {
-             partialRes = res.html;
-             els.mainBtns.style.display = "none";
-             els.partials.style.display = "flex";
-             toast("Stopped.");
+             partialRes = res.html; els.mainBtns.style.display = "none";
+             els.partials.style.display = "flex"; toast("Stopped.");
           } else {
-             dl(res.html, getFN("self"));
-             toast("Done!");
-             toggleControls("idle");
+             dl(res.html, getFN("self")); toast("Done!"); toggleControls("idle");
           }
         }
-      } catch(e) {
-        toast("Error: " + e.message);
-        toggleControls("idle");
-      }
+      } catch(e) { toast("Error: " + e.message); toggleControls("idle"); }
     };
 
     els.stop.onclick = () => ac?.abort();
-
     els.saveP.onclick = () => { if(partialRes) dl(partialRes, getFN("partial")); resetPartials(); };
     els.discP.onclick = resetPartials;
-
-    function resetPartials() {
-      partialRes = null; ac = null;
-      els.partials.style.display = "none";
-      els.mainBtns.style.display = "flex";
-      toggleControls("idle");
-    }
+    function resetPartials() { partialRes = null; ac = null; els.partials.style.display = "none"; els.mainBtns.style.display = "flex"; toggleControls("idle"); }
 
     // Draggable Logic
-    let isDrag = false, startX, startY, sL, sT;
-    const store = "hx_pos_"+location.hostname;
+    let isDrag = false, startX, startY, sL, sT; const store = "hx_pos_"+location.hostname;
     try { const p=JSON.parse(localStorage.getItem(store)); if(p) { wrap.style.left=p.x+"px"; wrap.style.top=p.y+"px"; wrap.style.right="auto"; wrap.style.bottom="auto"; } } catch(_){}
-
     els.fab.addEventListener("pointerdown", e => {
       if(e.button!==0)return; els.fab.setPointerCapture(e.pointerId);
       isDrag=false; startX=e.clientX; startY=e.clientY;
