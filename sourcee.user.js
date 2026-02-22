@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      3.3
-// @description  The ultimate HTML export tool. (Bulletproof Mobile Drag + AI Clean Dump)
+// @version      3.4
+// @description  The ultimate HTML export tool. (Fixed CSS Rendering + Bulletproof Drag + Clean AI Dump)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
@@ -52,11 +52,13 @@
     var useTs = true;
     try { if (localStorage.getItem(STORE_TS) === "0") useTs = false; } catch (e3) {}
 
-    // ---------- UI Styles ----------
+    // ---------- UI Styles (ES5 strings, no template literals, no SVGs) ----------
+    // FIX: Split the font shorthand because browsers hate calc() inside font: shorthand.
     var css =
       ":root{--hx_scale:" + uiScale + ";}\n" +
       "#hx_wrap{position:fixed;right:12px;bottom:96px;z-index:2147483647;" +
-      "font:calc(13px*var(--hx_scale))/1.2 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;" +
+      "font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;" +
+      "font-size:calc(13px*var(--hx_scale));line-height:1.2;" +
       "color:#fff;user-select:none;touch-action:none;max-width:100vw;}\n" +
 
       "#hx_fab{display:inline-flex;align-items:center;gap:10px;" +
@@ -75,6 +77,7 @@
       ".hx_field,.hx_select{width:100%;box-sizing:border-box;padding:calc(11px*var(--hx_scale));" +
       "border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.32);" +
       "color:#fff;outline:none;font-size:calc(13px*var(--hx_scale));}\n" +
+
       ".hx_select{appearance:auto;}\n" +
 
       ".hx_row{display:flex;gap:calc(8px*var(--hx_scale));}\n" +
@@ -143,6 +146,7 @@
         .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.text(); });
     }
 
+    // GM_xmlhttpRequest wrapper for cross-origin CSS
     function fetchCors(url) {
       return new Promise(function (resolve, reject) {
         if (typeof GM_xmlhttpRequest === "undefined") return reject("GM_xmlhttpRequest not granted");
@@ -172,7 +176,7 @@
     function getCleanDOM() {
       var clone = document.documentElement.cloneNode(true);
       
-      // Auto-remove Sourcee from the dump!
+      // Auto-remove Sourcee from the dump so it stays clean!
       var sourceeWidget = clone.querySelector("#hx_wrap");
       if (sourceeWidget) sourceeWidget.remove();
       var sourceeToast = clone.querySelector("#hx_toast");
@@ -248,6 +252,7 @@
 
       var total = limit > 0 ? Math.min(limit, imgs.length) : imgs.length;
       onProg(0, total);
+
       var count = 0;
 
       function step() {
@@ -267,7 +272,7 @@
             img.removeAttribute("loading");
           })
           .catch(function (e) {
-            if (signal && signal.aborted) return;
+            if (signal && signal.aborted) return; // stop fast
             console.warn("[Sourcee] image inline failed:", e);
           })
           .then(function () {
@@ -511,16 +516,4 @@
       if (!isDrag && (Math.abs(dx) > 12 || Math.abs(dy) > 12)) {
         isDrag = true;
         wrap.style.right = "auto";
-        wrap.style.bottom = "auto";
-      }
-
-      if (isDrag) {
-        wrap.style.left = (sL + dx) + "px";
-        wrap.style.top = (sT + dy) + "px";
-      }
-    });
-
-    document.addEventListener("pointerup", function (e) {
-      if (startX !== null) {
-        if (isDrag) {
-       
+        
