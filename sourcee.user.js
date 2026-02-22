@@ -1,14 +1,14 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      3.1
-// @description  The ultimate HTML export tool. (Working UI + Fixed Drag + Clean AI Dump)
+// @version      3.5
+// @description  The ultimate HTML export tool. (Working UI + Auth Images + Quick Abort + Safe Dump)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
-// @run-at       document-idle
 // @connect      *
+// @run-at       document-idle
 // ==/UserScript==
 
 (function () {
@@ -31,7 +31,7 @@
   initSourcee();
 
   function runScript() {
-    // ---------- UI Styles ----------
+    // ---------- UI Styles (Keeping the exact v3.1 format that worked!) ----------
     safeAddStyle(`
       #hx_wrap {
         position: fixed; right: 12px; bottom: 80px; z-index: 2147483647;
@@ -143,20 +143,29 @@
     function getCleanDOM() {
         const clone = document.documentElement.cloneNode(true);
         
-        // Remove Sourcee UI from the Dump so it doesn't pollute the AI context
+        // Remove Sourcee UI
         const sourceeMenu = clone.querySelector("#hx_wrap");
         if (sourceeMenu) sourceeMenu.remove();
         const sourceeToast = clone.querySelector("#hx_toast");
         if (sourceeToast) sourceeToast.remove();
 
-        // Strip heavy/unnecessary tags to save AI token limits
+        // Strip heavy/unnecessary tags
         clone.querySelectorAll("script, noscript, iframe, canvas, video, audio, picture").forEach(e => e.remove());
         clone.querySelectorAll("svg").forEach(e => { if (e.innerHTML.length > 200) e.innerHTML = ""; });
+        
         // Strip base64 images
         clone.querySelectorAll("img, source").forEach(e => {
             if (e.src && e.src.startsWith("data:")) e.removeAttribute("src");
             if (e.srcset) e.removeAttribute("srcset");
         });
+
+        // PRIVACY REDACTION: Strip hidden inputs (CSRF tokens) and form values
+        clone.querySelectorAll('input[type="hidden"]').forEach(e => e.remove());
+        clone.querySelectorAll('input:not([type="hidden"]), textarea').forEach(e => {
+            if (e.hasAttribute('value')) e.setAttribute('value', '[REDACTED]');
+            if (e.tagName.toLowerCase() === 'textarea') e.textContent = '[REDACTED]';
+        });
+
         return clone.outerHTML;
     }
 
@@ -197,7 +206,8 @@
     // ---------- Self-Contained Logic ----------
     async function fetchBase64(url, signal) {
       if(signal?.aborted) throw new Error("STOP");
-      const r = await fetch(url, {signal, cache:"no-store"});
+      // Added credentials: "include" so it works on logged-in sites
+      const r = await fetch(url, {signal, cache:"no-store", credentials:"include"});
       const b = await r.blob();
       return new Promise((res,rej)=>{
         const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(b);
@@ -218,7 +228,11 @@
           const b64 = await fetchBase64(abs, signal);
           img.setAttribute("src", b64);
           img.removeAttribute("srcset"); img.removeAttribute("loading");
-        } catch(e) { console.warn(e); }
+        } catch(e) { 
+          // IMMEDIATE ABORT: Break out of the loop instantly if cancelled
+          if(signal?.aborted) return {html:doc.documentElement.outerHTML, stopped:true};
+          console.warn(e); 
+        }
         count++; onProg(count, total);
       }
       return {html:doc.documentElement.outerHTML, stopped:false};
@@ -344,7 +358,7 @@
       if(!els.fab.hasPointerCapture(e.pointerId)) return;
       const dx=e.clientX-startX, dy=e.clientY-startY;
       
-      // FIX: Increased threshold to >15px so tapping opens the menu instantly.
+      // Drag Threshold
       if(!isDrag && (Math.abs(dx) > 15 || Math.abs(dy) > 15)) {
           isDrag=true;
           wrap.style.right="auto"; wrap.style.bottom="auto";
@@ -355,10 +369,11 @@
       }
     });
     
+    // Toggle menu on pointerup if it was just a tap (not a drag)
     els.fab.addEventListener("pointerup", e => {
       try { els.fab.releasePointerCapture(e.pointerId); } catch(err){}
       if(isDrag) localStorage.setItem(store, JSON.stringify({x:parseFloat(wrap.style.left), y:parseFloat(wrap.style.top)}));
-      else els.menu.classList.toggle("show");
+      else els.menu.classList.toggle("show"); 
       isDrag = false;
     });
 
@@ -367,6 +382,5 @@
       isDrag = false;
     });
     
-    els.fab.onclick = null; 
   }
 })();
