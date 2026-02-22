@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      3.0
-// @description  The ultimate HTML export tool. (Slim UI + AI Dev Dump)
+// @version      3.1
+// @description  The ultimate HTML export tool. (Working UI + Fixed Drag + Clean AI Dump)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
 // @grant        GM_xmlhttpRequest
 // @run-at       document-idle
+// @connect      *
 // ==/UserScript==
 
 (function () {
@@ -140,8 +141,14 @@
 
     // ---------- Dev Dump Logic ----------
     function getCleanDOM() {
-        // Clone document to safely mutate without breaking the live page
         const clone = document.documentElement.cloneNode(true);
+        
+        // Remove Sourcee UI from the Dump so it doesn't pollute the AI context
+        const sourceeMenu = clone.querySelector("#hx_wrap");
+        if (sourceeMenu) sourceeMenu.remove();
+        const sourceeToast = clone.querySelector("#hx_toast");
+        if (sourceeToast) sourceeToast.remove();
+
         // Strip heavy/unnecessary tags to save AI token limits
         clone.querySelectorAll("script, noscript, iframe, canvas, video, audio, picture").forEach(e => e.remove());
         clone.querySelectorAll("svg").forEach(e => { if (e.innerHTML.length > 200) e.innerHTML = ""; });
@@ -267,7 +274,6 @@
     let ac = null;
     let partialRes = null;
 
-    els.fab.onclick = () => els.menu.classList.toggle("show");
     els.ts.onclick = () => { useTs=!useTs; els.ts.textContent = `Time: ${useTs?"ON":"OFF"}`; };
 
     function getFN(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`; }
@@ -324,26 +330,43 @@
     els.discP.onclick = resetPartials;
     function resetPartials() { partialRes = null; ac = null; els.partials.style.display = "none"; els.mainBtns.style.display = "flex"; toggleControls("idle"); }
 
-    // Draggable Logic
+    // ---------- Draggable Logic ----------
     let isDrag = false, startX, startY, sL, sT; const store = "hx_pos_"+location.hostname;
     try { const p=JSON.parse(localStorage.getItem(store)); if(p) { wrap.style.left=p.x+"px"; wrap.style.top=p.y+"px"; wrap.style.right="auto"; wrap.style.bottom="auto"; } } catch(_){}
+    
     els.fab.addEventListener("pointerdown", e => {
       if(e.button!==0)return; els.fab.setPointerCapture(e.pointerId);
       isDrag=false; startX=e.clientX; startY=e.clientY;
       const r=wrap.getBoundingClientRect(); sL=r.left; sT=r.top;
-      wrap.style.right="auto"; wrap.style.bottom="auto"; wrap.style.left=sL+"px"; wrap.style.top=sT+"px";
     });
+    
     els.fab.addEventListener("pointermove", e => {
       if(!els.fab.hasPointerCapture(e.pointerId)) return;
       const dx=e.clientX-startX, dy=e.clientY-startY;
-      if(Math.abs(dx)+Math.abs(dy)>5) isDrag=true;
-      wrap.style.left=(sL+dx)+"px"; wrap.style.top=(sT+dy)+"px";
+      
+      // FIX: Increased threshold to >15px so tapping opens the menu instantly.
+      if(!isDrag && (Math.abs(dx) > 15 || Math.abs(dy) > 15)) {
+          isDrag=true;
+          wrap.style.right="auto"; wrap.style.bottom="auto";
+      }
+      
+      if (isDrag) {
+          wrap.style.left=(sL+dx)+"px"; wrap.style.top=(sT+dy)+"px";
+      }
     });
+    
     els.fab.addEventListener("pointerup", e => {
-      els.fab.releasePointerCapture(e.pointerId);
+      try { els.fab.releasePointerCapture(e.pointerId); } catch(err){}
       if(isDrag) localStorage.setItem(store, JSON.stringify({x:parseFloat(wrap.style.left), y:parseFloat(wrap.style.top)}));
       else els.menu.classList.toggle("show");
+      isDrag = false;
     });
+
+    els.fab.addEventListener("pointercancel", e => {
+      try { els.fab.releasePointerCapture(e.pointerId); } catch(err){}
+      isDrag = false;
+    });
+    
     els.fab.onclick = null; 
   }
 })();
