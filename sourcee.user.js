@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      3.5
-// @description  The ultimate HTML export tool. (Working UI + Auth Images + Quick Abort + Safe Dump)
+// @version      3.6
+// @description  The ultimate HTML export tool. (UI Scaling + Safe Auth + AI Dump)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
@@ -31,44 +31,66 @@
   initSourcee();
 
   function runScript() {
-    // ---------- UI Styles (Keeping the exact v3.1 format that worked!) ----------
+    // ---------- Scaling Setup ----------
+    const STORE_SCALE = "hx_scale_" + location.hostname;
+    let isTouch = false;
+    try { isTouch = matchMedia("(pointer: coarse)").matches; } catch (e) {}
+
+    let uiScale = 1.0;
+    try {
+      const saved = parseFloat(localStorage.getItem(STORE_SCALE));
+      if (!isNaN(saved) && saved > 0) uiScale = saved;
+      else uiScale = isTouch ? 1.35 : 1.0; // Auto-boost size on phones
+    } catch (e2) {
+      uiScale = isTouch ? 1.35 : 1.0;
+    }
+
+    // ---------- UI Styles ----------
     safeAddStyle(`
+      :root {
+        --hx_scale: ${uiScale};
+      }
+
       #hx_wrap {
         position: fixed; right: 12px; bottom: 80px; z-index: 2147483647;
-        font: 13px/1.2 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: #fff;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        font-size: calc(13px * var(--hx_scale));
+        line-height: 1.2;
+        color: #fff;
         user-select: none; touch-action: none; max-width: 100vw;
       }
+      
       #hx_fab {
-        display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px;
+        display: inline-flex; align-items: center; gap: 8px; 
+        padding: calc(10px * var(--hx_scale)) calc(14px * var(--hx_scale));
         border-radius: 24px; border: 1px solid rgba(255,255,255,0.18);
         background: rgba(20,20,20,0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.4); cursor: pointer;
       }
+      
       #hx_menu {
-        margin-top: 12px; width: min(300px, 90vw); border-radius: 16px;
+        margin-top: 12px; width: min(calc(300px * var(--hx_scale)), 90vw); border-radius: 16px;
         border: 1px solid rgba(255,255,255,0.14); background: rgba(25,25,25,0.95);
         backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-        box-shadow: 0 16px 40px rgba(0,0,0,0.6); padding: 12px;
-        display: none; flex-direction: column; gap: 10px;
+        box-shadow: 0 16px 40px rgba(0,0,0,0.6); padding: calc(12px * var(--hx_scale));
+        display: none; flex-direction: column; gap: calc(10px * var(--hx_scale));
       }
       #hx_menu.show { display: flex; }
 
       .hx_field, .hx_select {
-        width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px;
+        width: 100%; box-sizing: border-box; padding: calc(10px * var(--hx_scale)); border-radius: 8px;
         border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.3);
-        color: #fff; outline: none; font-size: 13px;
+        color: #fff; outline: none; font-size: calc(13px * var(--hx_scale));
       }
-      .hx_select {
-        appearance: none;
-        background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
-        background-repeat: no-repeat; background-position: right 10px center;
-        background-size: 10px; padding-right: 30px;
-      }
+      
+      /* Plain appearance auto to avoid SVG rendering bugs */
+      .hx_select { appearance: auto; }
       .hx_select option { background: #333; }
 
-      .hx_row { display: flex; gap: 8px; }
+      .hx_row { display: flex; gap: calc(8px * var(--hx_scale)); }
+      
       .hx_btn {
-        flex: 1; padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12);
+        flex: 1; padding: calc(10px * var(--hx_scale)); border-radius: 8px; border: 1px solid rgba(255,255,255,0.12);
         background: rgba(255,255,255,0.08); color: #eee; cursor: pointer;
         text-align: center; font-weight: 600; transition: all 0.2s;
       }
@@ -82,16 +104,17 @@
       }
       @keyframes hx_pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
 
-      .hx_settings { display: flex; align-items: center; justify-content: space-between; font-size: 11px; opacity: 0.8; padding: 0 4px; }
-      .hx_tiny_inp { width: 50px; padding: 4px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #fff; text-align: center; }
+      .hx_settings { display: flex; align-items: center; justify-content: space-between; font-size: calc(11px * var(--hx_scale)); opacity: 0.8; padding: 0 4px; }
+      .hx_tiny_inp { width: calc(50px * var(--hx_scale)); padding: calc(4px * var(--hx_scale)); border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #fff; text-align: center; font-size: calc(12px * var(--hx_scale)); }
       .hx_clickable { cursor: pointer; text-decoration: underline; }
 
       #hx_toast {
         position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%) translateY(20px);
-        z-index: 2147483647; padding: 10px 16px; border-radius: 20px;
+        z-index: 2147483647; padding: calc(10px * var(--hx_scale)) calc(16px * var(--hx_scale)); border-radius: 20px;
         background: rgba(20,20,20,0.9); border: 1px solid rgba(255,255,255,0.1);
         backdrop-filter: blur(4px); opacity: 0; pointer-events: none;
         transition: opacity .2s, transform .2s; color: #fff; font-weight: 600;
+        font-size: calc(13px * var(--hx_scale));
       }
       #hx_toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
     `);
@@ -206,7 +229,7 @@
     // ---------- Self-Contained Logic ----------
     async function fetchBase64(url, signal) {
       if(signal?.aborted) throw new Error("STOP");
-      // Added credentials: "include" so it works on logged-in sites
+      // Include credentials to fetch auth/paywalled images!
       const r = await fetch(url, {signal, cache:"no-store", credentials:"include"});
       const b = await r.blob();
       return new Promise((res,rej)=>{
@@ -229,7 +252,7 @@
           img.setAttribute("src", b64);
           img.removeAttribute("srcset"); img.removeAttribute("loading");
         } catch(e) { 
-          // IMMEDIATE ABORT: Break out of the loop instantly if cancelled
+          // Immediate abort on cancel
           if(signal?.aborted) return {html:doc.documentElement.outerHTML, stopped:true};
           console.warn(e); 
         }
@@ -258,6 +281,7 @@
         <div class="hx_settings">
           <label>Limit: <input id="hx_limit" type="number" class="hx_tiny_inp" value="0"></label>
           <span id="hx_ts" class="hx_clickable">Time: ON</span>
+          <span id="hx_scale" class="hx_clickable">UI: ${Math.round(uiScale * 100)}%</span>
         </div>
         <div id="hx_partials" class="hx_row" style="display:none">
           <div id="hx_save_p" class="hx_btn primary">Save Partial</div>
@@ -277,6 +301,7 @@
       stop: wrap.querySelector("#hx_stop"),
       limit: wrap.querySelector("#hx_limit"),
       ts: wrap.querySelector("#hx_ts"),
+      scale: wrap.querySelector("#hx_scale"),
       partials: wrap.querySelector("#hx_partials"),
       saveP: wrap.querySelector("#hx_save_p"),
       discP: wrap.querySelector("#hx_disc_p"),
@@ -289,6 +314,20 @@
     let partialRes = null;
 
     els.ts.onclick = () => { useTs=!useTs; els.ts.textContent = `Time: ${useTs?"ON":"OFF"}`; };
+
+    // Scale Cycling Logic
+    els.scale.onclick = () => {
+      const steps = [1.0, 1.15, 1.35, 1.5, 1.7];
+      let idx = 0;
+      for (let i = 0; i < steps.length; i++) {
+        if (Math.abs(steps[i] - uiScale) < 0.02) { idx = i; break; }
+      }
+      uiScale = steps[(idx + 1) % steps.length];
+      document.documentElement.style.setProperty("--hx_scale", String(uiScale));
+      els.scale.textContent = `UI: ${Math.round(uiScale * 100)}%`;
+      try { localStorage.setItem(STORE_SCALE, String(uiScale)); } catch (e2) {}
+      toast(`UI scaled to ${Math.round(uiScale * 100)}%`);
+    };
 
     function getFN(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`; }
     function getFNTxt(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.md`; }
@@ -369,11 +408,10 @@
       }
     });
     
-    // Toggle menu on pointerup if it was just a tap (not a drag)
     els.fab.addEventListener("pointerup", e => {
       try { els.fab.releasePointerCapture(e.pointerId); } catch(err){}
       if(isDrag) localStorage.setItem(store, JSON.stringify({x:parseFloat(wrap.style.left), y:parseFloat(wrap.style.top)}));
-      else els.menu.classList.toggle("show"); 
+      else els.menu.classList.toggle("show");
       isDrag = false;
     });
 
