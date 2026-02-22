@@ -445,4 +445,10 @@
       isDrag = false;
     });
 
-    els.fab.addEventListener("pointercancel"
+    els.fab.addEventListener("pointercancel", e => {
+      try { els.fab.releasePointerCapture(e.pointerId); } catch(err){}
+      isDrag = false;
+    });
+    
+  }
+})();
