@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      3.2
-// @description  The ultimate HTML export tool. (All modes restored + mobile-safe UI scale + better Stop)
+// @version      3.3
+// @description  The ultimate HTML export tool. (Bulletproof Mobile Drag + AI Clean Dump)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
@@ -52,7 +52,7 @@
     var useTs = true;
     try { if (localStorage.getItem(STORE_TS) === "0") useTs = false; } catch (e3) {}
 
-    // ---------- UI Styles (no template literals, no SVG data-uri, no fancy glyphs) ----------
+    // ---------- UI Styles ----------
     var css =
       ":root{--hx_scale:" + uiScale + ";}\n" +
       "#hx_wrap{position:fixed;right:12px;bottom:96px;z-index:2147483647;" +
@@ -75,8 +75,6 @@
       ".hx_field,.hx_select{width:100%;box-sizing:border-box;padding:calc(11px*var(--hx_scale));" +
       "border-radius:10px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.32);" +
       "color:#fff;outline:none;font-size:calc(13px*var(--hx_scale));}\n" +
-
-      /* Keep select simple (no custom arrow = fewer mobile parse/copy issues) */
       ".hx_select{appearance:auto;}\n" +
 
       ".hx_row{display:flex;gap:calc(8px*var(--hx_scale));}\n" +
@@ -145,7 +143,6 @@
         .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.text(); });
     }
 
-    // GM_xmlhttpRequest wrapper for cross-origin CSS
     function fetchCors(url) {
       return new Promise(function (resolve, reject) {
         if (typeof GM_xmlhttpRequest === "undefined") return reject("GM_xmlhttpRequest not granted");
@@ -174,6 +171,13 @@
     // ---------- Dev Dump ----------
     function getCleanDOM() {
       var clone = document.documentElement.cloneNode(true);
+      
+      // Auto-remove Sourcee from the dump!
+      var sourceeWidget = clone.querySelector("#hx_wrap");
+      if (sourceeWidget) sourceeWidget.remove();
+      var sourceeToast = clone.querySelector("#hx_toast");
+      if (sourceeToast) sourceeToast.remove();
+
       clone.querySelectorAll("script, noscript, iframe, canvas, video, audio, picture").forEach(function (e) { e.remove(); });
       clone.querySelectorAll("svg").forEach(function (e) { if ((e.innerHTML || "").length > 200) e.innerHTML = ""; });
       clone.querySelectorAll("img, source").forEach(function (e) {
@@ -198,7 +202,6 @@
       md += "\n## 2. EXTERNAL STYLESHEETS (<link rel=\"stylesheet\">)\n";
       var links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
 
-      // sequential fetch (simpler + less likely to freeze mobile)
       var chain = Promise.resolve();
       links.forEach(function (lnk, i) {
         chain = chain.then(function () {
@@ -245,7 +248,6 @@
 
       var total = limit > 0 ? Math.min(limit, imgs.length) : imgs.length;
       onProg(0, total);
-
       var count = 0;
 
       function step() {
@@ -265,7 +267,7 @@
             img.removeAttribute("loading");
           })
           .catch(function (e) {
-            if (signal && signal.aborted) return; // stop fast
+            if (signal && signal.aborted) return;
             console.warn("[Sourcee] image inline failed:", e);
           })
           .then(function () {
@@ -465,8 +467,8 @@
       toast("Ready.");
     }
 
-    // ---------- Draggable FAB (with saved position) ----------
-    var isDrag = false, startX = 0, startY = 0, sL = 0, sT = 0;
+    // ---------- Draggable FAB (Bulletproof Mobile Edition) ----------
+    var isDrag = false, startX = null, startY = null, sL = 0, sT = 0;
 
     try {
       var p = JSON.parse(localStorage.getItem(STORE_POS));
@@ -478,41 +480,47 @@
       }
     } catch (e4) {}
 
+    // Use standard click for opening the menu. This works 100% of the time.
+    els.fab.addEventListener("click", function (e) {
+      if (isDrag) {
+        e.preventDefault();
+        return;
+      }
+      els.menu.classList.toggle("show");
+    });
+
+    // Handle drag exclusively with document-level pointer events
     els.fab.addEventListener("pointerdown", function (e) {
-      if (e.button !== 0) return;
-      els.fab.setPointerCapture(e.pointerId);
-      isDrag = false;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
       startX = e.clientX;
       startY = e.clientY;
+      isDrag = false;
+
       var r = wrap.getBoundingClientRect();
       sL = r.left;
       sT = r.top;
-      wrap.style.right = "auto";
-      wrap.style.bottom = "auto";
-      wrap.style.left = sL + "px";
-      wrap.style.top = sT + "px";
     });
 
-    els.fab.addEventListener("pointermove", function (e) {
-      if (!els.fab.hasPointerCapture(e.pointerId)) return;
-      var dx = e.clientX - startX, dy = e.clientY - startY;
-      if (Math.abs(dx) + Math.abs(dy) > 6) isDrag = true;
-      wrap.style.left = (sL + dx) + "px";
-      wrap.style.top = (sT + dy) + "px";
-    });
+    document.addEventListener("pointermove", function (e) {
+      if (startX === null) return;
+      
+      var dx = e.clientX - startX;
+      var dy = e.clientY - startY;
 
-    els.fab.addEventListener("pointerup", function (e) {
-      try { if (els.fab.hasPointerCapture(e.pointerId)) els.fab.releasePointerCapture(e.pointerId); } catch (x) {}
+      // 12px threshold to differentiate a tap from a drag
+      if (!isDrag && (Math.abs(dx) > 12 || Math.abs(dy) > 12)) {
+        isDrag = true;
+        wrap.style.right = "auto";
+        wrap.style.bottom = "auto";
+      }
+
       if (isDrag) {
-        try {
-          localStorage.setItem(STORE_POS, JSON.stringify({
-            x: parseFloat(wrap.style.left),
-            y: parseFloat(wrap.style.top)
-          }));
-        } catch (e5) {}
-      } else {
-        els.menu.classList.toggle("show");
+        wrap.style.left = (sL + dx) + "px";
+        wrap.style.top = (sT + dy) + "px";
       }
     });
 
- 
+    document.addEventListener("pointerup", function (e) {
+      if (startX !== null) {
+        if (isDrag) {
+       
