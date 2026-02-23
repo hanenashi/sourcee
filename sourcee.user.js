@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      3.9
-// @description  The ultimate HTML export tool. (Advanced Asset Inspector with Domains & Iframes)
+// @version      4.0
+// @description  The ultimate HTML export tool. (Asset Inspector + Smart Checkbox Management)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
@@ -98,6 +98,13 @@
       "@keyframes hx_pulse{0%{opacity:1;}50%{opacity:0.7;}100%{opacity:1;}}\n" +
 
       /* Asset Inspector Checklist Styles */
+      "#hx_asset_ctrls{display:none;gap:calc(6px*var(--hx_scale));margin-bottom:calc(-4px*var(--hx_scale));flex-wrap:wrap;}\n" +
+      ".hx_actrl{padding:3px 6px;border-radius:4px;font-weight:bold;font-size:calc(10px*var(--hx_scale));cursor:pointer;background:rgba(255,255,255,0.15);color:#fff;display:inline-flex;align-items:center;}\n" +
+      ".hx_actrl:active{background:rgba(255,255,255,0.3);}\n" +
+      ".hx_actrl.css{background:#2962ff;}\n" +
+      ".hx_actrl.js{background:#ffd600;color:#000;}\n" +
+      ".hx_actrl.html{background:#ff4081;}\n" +
+
       "#hx_asset_box{display:none;max-height:calc(200px*var(--hx_scale));overflow-y:auto;" +
       "background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:8px;" +
       "padding:calc(8px*var(--hx_scale));font-size:calc(11px*var(--hx_scale));flex-direction:column;gap:6px;}\n" +
@@ -350,6 +357,13 @@
           <option value="assets">Asset Inspector (Network)</option>
         </select>
         
+        <div id="hx_asset_ctrls">
+          <span class="hx_actrl" data-sel="all">All</span>
+          <span class="hx_actrl" data-sel="none">None</span>
+          <span class="hx_actrl css" data-sel="css">CSS</span>
+          <span class="hx_actrl js" data-sel="js">JS</span>
+          <span class="hx_actrl html" data-sel="html">FRM</span>
+        </div>
         <div id="hx_asset_box"></div>
 
         <div class="hx_row" id="hx_main_row">
@@ -384,7 +398,8 @@
       saveP: wrap.querySelector("#hx_save_p"),
       discP: wrap.querySelector("#hx_disc_p"),
       mainBtns: wrap.querySelector("#hx_main_row"),
-      assetBox: wrap.querySelector("#hx_asset_box")
+      assetBox: wrap.querySelector("#hx_asset_box"),
+      assetCtrls: wrap.querySelector("#hx_asset_ctrls")
     };
 
     els.name.value = sanitize(location.hostname + location.pathname);
@@ -417,14 +432,50 @@
       toast(`UI scaled to ${Math.round(uiScale * 100)}%`);
     };
 
+    // Asset Box Mode Reset
     els.mode.addEventListener("change", () => {
         els.assetBox.style.display = "none";
+        els.assetCtrls.style.display = "none";
         els.assetBox.innerHTML = "";
         if (els.mode.value === "assets") {
             els.start.textContent = "Scan Assets";
         } else {
             els.start.textContent = "Start";
         }
+    });
+
+    // Update Download Button dynamically when clicking checkboxes
+    els.assetBox.addEventListener("change", (e) => {
+        if (e.target.tagName === "INPUT") {
+            const count = els.assetBox.querySelectorAll('input:checked').length;
+            els.start.textContent = `Download (${count})`;
+        }
+    });
+
+    // Smart Selection Button Logic
+    els.assetCtrls.addEventListener("click", (e) => {
+        if (!e.target.classList.contains("hx_actrl")) return;
+        const sel = e.target.getAttribute("data-sel");
+        const boxes = els.assetBox.querySelectorAll('input[type="checkbox"]');
+        
+        boxes.forEach(b => {
+            if (sel === "all") {
+                b.checked = true;
+            } else if (sel === "none") {
+                b.checked = false;
+            } else {
+                // If they clicked JS, only check JS, etc.
+                if (b.getAttribute("data-type") === sel) {
+                    b.checked = true;
+                } else {
+                    b.checked = false;
+                }
+            }
+        });
+
+        // Trigger the counter update manually
+        const count = els.assetBox.querySelectorAll('input:checked').length;
+        els.start.textContent = `Download (${count})`;
     });
 
     function getFN(suffix) { 
@@ -439,6 +490,8 @@
         if (state === "running") {
             els.stop.classList.remove("disabled"); 
             els.mode.disabled = true;
+            els.assetCtrls.style.pointerEvents = "none"; // Disable smart buttons during download
+            els.assetCtrls.style.opacity = "0.5";
         } else {
             els.start.classList.remove("disabled", "working");
             if (els.mode.value !== "assets" || els.assetBox.style.display === "none") {
@@ -446,6 +499,8 @@
             }
             els.stop.classList.add("disabled"); 
             els.mode.disabled = false;
+            els.assetCtrls.style.pointerEvents = "auto";
+            els.assetCtrls.style.opacity = "1";
         }
     }
 
@@ -537,7 +592,6 @@
                       fn = parts[parts.length - 1] || "index";
                   }
                   
-                  // Clean up crazy long query string filenames
                   if (fn.length > 35) {
                       fn = fn.substring(0, 35) + "...";
                   }
@@ -550,15 +604,17 @@
                   
                   let lbl = document.createElement("label");
                   lbl.className = "hx_asset_item";
-                  lbl.title = a.url; // Tooltip to see full URL on hover/long-press
+                  lbl.title = a.url; 
+                  // Adding data-type attribute here makes the Smart Selection buttons work instantly
                   lbl.innerHTML = `
-                    <input type="checkbox" checked data-url="${a.url}" data-fn="${saveFn}">
+                    <input type="checkbox" checked data-url="${a.url}" data-fn="${saveFn}" data-type="${a.type}">
                     <span class="hx_badge ${a.type}">${a.badge}</span> 
                     <span><span class="hx_domain">[${domain}]</span> ${fn}</span>
                   `;
                   els.assetBox.appendChild(lbl);
               });
               
+              els.assetCtrls.style.display = "flex";
               els.assetBox.style.display = "flex";
               els.start.textContent = `Download (${assets.length})`;
           } else {
@@ -713,4 +769,4 @@
     });
   }
 })();
-      
+            
