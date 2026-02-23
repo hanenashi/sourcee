@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      3.8.1
-// @description  The ultimate HTML export tool. (Asset Inspector + Syntax Fixes)
+// @version      3.9
+// @description  The ultimate HTML export tool. (Advanced Asset Inspector with Domains & Iframes)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
@@ -98,7 +98,7 @@
       "@keyframes hx_pulse{0%{opacity:1;}50%{opacity:0.7;}100%{opacity:1;}}\n" +
 
       /* Asset Inspector Checklist Styles */
-      "#hx_asset_box{display:none;max-height:calc(160px*var(--hx_scale));overflow-y:auto;" +
+      "#hx_asset_box{display:none;max-height:calc(200px*var(--hx_scale));overflow-y:auto;" +
       "background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:8px;" +
       "padding:calc(8px*var(--hx_scale));font-size:calc(11px*var(--hx_scale));flex-direction:column;gap:6px;}\n" +
       ".hx_asset_item{display:flex;align-items:center;gap:8px;word-break:break-all;line-height:1.3;cursor:pointer;}\n" +
@@ -106,6 +106,8 @@
       ".hx_badge{padding:2px 5px;border-radius:4px;font-weight:bold;font-size:calc(9px*var(--hx_scale));flex-shrink:0;text-transform:uppercase;}\n" +
       ".hx_badge.css{background:#2962ff;color:#fff;}\n" +
       ".hx_badge.js{background:#ffd600;color:#000;}\n" +
+      ".hx_badge.html{background:#ff4081;color:#fff;}\n" +
+      ".hx_domain{opacity:0.6;font-size:0.9em;margin-right:4px;}\n" +
 
       ".hx_settings{display:flex;align-items:center;justify-content:space-between;font-size:calc(11px*var(--hx_scale));opacity:0.8;padding:0 4px;}\n" +
       ".hx_tiny_inp{width:calc(50px*var(--hx_scale));padding:calc(4px*var(--hx_scale));border-radius:4px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#fff;text-align:center;font-size:calc(12px*var(--hx_scale));}\n" +
@@ -345,7 +347,7 @@
           <option value="pretty">Beautify Fetch (.html)</option>
           <option value="self">Self-Contained Img (.html)</option>
           <option value="devdump">AI Context Dump (.md)</option>
-          <option value="assets">Asset Inspector (.js/.css)</option>
+          <option value="assets">Asset Inspector (Network)</option>
         </select>
         
         <div id="hx_asset_box"></div>
@@ -367,7 +369,7 @@
     `;
     document.body.appendChild(wrap);
 
-      // ---------- Logic Binding ----------
+        // ---------- Logic Binding ----------
     const els = {
       fab: wrap.querySelector("#hx_fab"),
       menu: wrap.querySelector("#hx_menu"),
@@ -500,38 +502,60 @@
           if (els.assetBox.style.display === "none" || els.assetBox.innerHTML === "") {
               // 1. SCAN PHASE
               let assets = [];
+              
               document.querySelectorAll('link[rel="stylesheet"]').forEach(el => {
-                  if (el.href) {
-                      assets.push({ type: 'css', url: el.href });
-                  }
+                  if (el.href) assets.push({ type: 'css', badge: 'css', url: el.href });
               });
+              
               document.querySelectorAll('script[src]').forEach(el => {
-                  if (el.src) {
-                      assets.push({ type: 'js', url: el.src });
-                  }
+                  if (el.src) assets.push({ type: 'js', badge: 'js', url: el.src });
+              });
+              
+              document.querySelectorAll('iframe[src]').forEach(el => {
+                  if (el.src) assets.push({ type: 'html', badge: 'frm', url: el.src });
               });
               
               if (assets.length === 0) {
-                  return toast("No external CSS/JS found.");
+                  return toast("No external assets found.");
               }
 
               els.assetBox.innerHTML = "";
               assets.forEach((a, i) => {
-                  let fn = a.type + "_" + i;
-                  try {
-                      let urlObj = new URL(a.url, location.href);
-                      let parts = urlObj.pathname.split('/');
-                      if (parts[parts.length - 1]) {
-                          fn = parts[parts.length - 1];
-                      }
+                  let urlObj;
+                  try { 
+                      urlObj = new URL(a.url, location.href); 
                   } catch (e) {
                       // Ignored
                   }
                   
+                  let fn = "file_" + i;
+                  let domain = "unknown";
+                  
+                  if (urlObj) {
+                      domain = urlObj.hostname.replace(/^www\./, '');
+                      let parts = urlObj.pathname.split('/');
+                      fn = parts[parts.length - 1] || "index";
+                  }
+                  
+                  // Clean up crazy long query string filenames
+                  if (fn.length > 35) {
+                      fn = fn.substring(0, 35) + "...";
+                  }
+                  
+                  let safeDomain = domain.replace(/[^a-zA-Z0-9]/g, '_');
+                  let saveFn = `${safeDomain}_${fn}`;
+                  if (a.type === 'html' && !saveFn.endsWith('.html')) {
+                      saveFn += ".html";
+                  }
+                  
                   let lbl = document.createElement("label");
                   lbl.className = "hx_asset_item";
-                  lbl.innerHTML = `<input type="checkbox" checked data-url="${a.url}" data-fn="${fn}">
-                                   <span class="hx_badge ${a.type}">${a.type}</span> ${fn}`;
+                  lbl.title = a.url; // Tooltip to see full URL on hover/long-press
+                  lbl.innerHTML = `
+                    <input type="checkbox" checked data-url="${a.url}" data-fn="${saveFn}">
+                    <span class="hx_badge ${a.type}">${a.badge}</span> 
+                    <span><span class="hx_domain">[${domain}]</span> ${fn}</span>
+                  `;
                   els.assetBox.appendChild(lbl);
               });
               
@@ -689,3 +713,4 @@
     });
   }
 })();
+      
