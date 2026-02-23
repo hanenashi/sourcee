@@ -400,9 +400,169 @@
           const res = await processImages(document.documentElement.outerHTML, lim, ac.signal, (c,t) => els.start.textContent = `Img ${c}/${t}`);
           if(res.stopped) {
              partialRes = res.html; els.mainBtns.style.display = "none";
+    // ---------- Logic Binding ----------
+    const els = {
+      fab: wrap.querySelector("#hx_fab"),
+      menu: wrap.querySelector("#hx_menu"),
+      name: wrap.querySelector("#hx_name"),
+      mode: wrap.querySelector("#hx_mode"),
+      start: wrap.querySelector("#hx_start"),
+      stop: wrap.querySelector("#hx_stop"),
+      limit: wrap.querySelector("#hx_limit"),
+      ts: wrap.querySelector("#hx_ts"),
+      scale: wrap.querySelector("#hx_scale"),
+      partials: wrap.querySelector("#hx_partials"),
+      saveP: wrap.querySelector("#hx_save_p"),
+      discP: wrap.querySelector("#hx_disc_p"),
+      mainBtns: wrap.querySelector("#hx_main_row"),
+      assetBox: wrap.querySelector("#hx_asset_box")
+    };
+
+    els.name.value = sanitize(location.hostname + location.pathname);
+    let useTs = true;
+    let ac = null;
+    let partialRes = null;
+
+    els.ts.onclick = () => { useTs=!useTs; els.ts.textContent = `Time: ${useTs?"ON":"OFF"}`; };
+
+    els.scale.onclick = () => {
+      const steps = [1.0, 1.15, 1.35, 1.5, 1.7];
+      let idx = 0;
+      for (let i = 0; i < steps.length; i++) {
+        if (Math.abs(steps[i] - uiScale) < 0.02) { idx = i; break; }
+      }
+      uiScale = steps[(idx + 1) % steps.length];
+      document.documentElement.style.setProperty("--hx_scale", String(uiScale));
+      els.scale.textContent = `UI: ${Math.round(uiScale * 100)}%`;
+      try { localStorage.setItem(STORE_SCALE, String(uiScale)); } catch (e2) {}
+      toast(`UI scaled to ${Math.round(uiScale * 100)}%`);
+    };
+
+    els.mode.addEventListener("change", () => {
+        els.assetBox.style.display = "none";
+        els.assetBox.innerHTML = "";
+        if (els.mode.value === "assets") {
+            els.start.textContent = "Scan Assets";
+        } else {
+            els.start.textContent = "Start";
+        }
+    });
+
+    function getFN(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`; }
+    function getFNTxt(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.md`; }
+
+    function toggleControls(state) {
+        if (state === "running") {
+            els.stop.classList.remove("disabled"); els.mode.disabled = true;
+        } else {
+            els.start.classList.remove("disabled", "working");
+            // Only reset to "Start" if we aren't in the middle of looking at assets
+            if (els.mode.value !== "assets" || els.assetBox.style.display === "none") {
+                els.start.textContent = els.mode.value === "assets" ? "Scan Assets" : "Start";
+            }
+            els.stop.classList.add("disabled"); els.mode.disabled = false;
+        }
+    }
+
+    els.start.onclick = async () => {
+      if (els.start.classList.contains("working") || els.start.classList.contains("disabled")) return;
+      const mode = els.mode.value, lim = parseInt(els.limit.value)||0;
+      
+      try {
+        if(mode === "fetch") {
+          toast("Fetching..."); dl(await fetchTxt(location.href), getFN("source"));
+        } else if(mode === "dom") {
+          toast("Snapshotting..."); dl("<!doctype html>\n"+document.documentElement.outerHTML, getFN("dom"));
+        } else if(mode === "pretty") {
+          toast("Beautifying..."); dl(beautify(await fetchTxt(location.href)), getFN("pretty"));
+        } else if(mode === "devdump") {
+          toggleControls("running");
+          els.start.classList.add("working");
+          els.start.textContent = "Scraping...";
+          
+          const mdData = await buildDevDump((c,t) => { els.start.textContent = `CSS ${c}/${t}`; });
+          dl(mdData, getFNTxt("AI_CONTEXT"));
+          toast("Dev Dump Saved!");
+          toggleControls("idle");
+        } else if(mode === "self") {
+          ac = new AbortController(); toggleControls("running");
+          els.start.classList.add("working"); els.start.textContent = "Prep...";
+
+          const res = await processImages(document.documentElement.outerHTML, lim, ac.signal, (c,t) => els.start.textContent = `Img ${c}/${t}`);
+          if(res.stopped) {
+             partialRes = res.html; els.mainBtns.style.display = "none";
              els.partials.style.display = "flex"; toast("Stopped.");
           } else {
              dl(res.html, getFN("self")); toast("Done!"); toggleControls("idle");
+          }
+        } else if(mode === "assets") {
+          // --- ASSET INSPECTOR MODE ---
+          if (els.assetBox.style.display === "none" || els.assetBox.innerHTML === "") {
+              // 1. SCAN PHASE
+              let assets = [];
+              document.querySelectorAll('link[rel="stylesheet"]').forEach(el => {
+                  if (el.href) assets.push({ type: 'css', url: el.href });
+              });
+              document.querySelectorAll('script[src]').forEach(el => {
+                  if (el.src) assets.push({ type: 'js', url: el.src });
+              });
+              
+              if (assets.length === 0) return toast("No external CSS/JS found.");
+
+              els.assetBox.innerHTML = "";
+              assets.forEach((a, i) => {
+                  let fn = a.type + "_" + i;
+                  try {
+                      let urlObj = new URL(a.url, location.href);
+                      let parts = urlObj.pathname.split('/');
+                      if (parts[parts.length - 1]) fn = parts[parts.length - 1];
+                  } catch (e) {}
+                  
+                  let lbl = document.createElement("label");
+                  lbl.className = "hx_asset_item";
+                  lbl.innerHTML = `<input type="checkbox" checked data-url="${a.url}" data-fn="${fn}">
+                                   <span class="hx_badge ${a.type}">${a.type}</span> ${fn}`;
+                  els.assetBox.appendChild(lbl);
+              });
+              
+              els.assetBox.style.display = "flex";
+              els.start.textContent = `Download (${assets.length})`;
+          } else {
+              // 2. DOWNLOAD PHASE
+              let checks = Array.from(els.assetBox.querySelectorAll('input:checked'));
+              if (checks.length === 0) return toast("No assets selected.");
+
+              ac = new AbortController();
+              toggleControls("running");
+              els.start.classList.add("working");
+              
+              let chain = Promise.resolve();
+              checks.forEach((chk, idx) => {
+                  chain = chain.then(() => {
+                      if (ac && ac.signal.aborted) throw new Error("STOP");
+                      els.start.textContent = `Fetching ${idx + 1}/${checks.length}`;
+                      let url = chk.getAttribute("data-url");
+                      let fn = chk.getAttribute("data-fn"); // Using EXACT filename for local stitching
+                      
+                      return fetchCors(url).then(txt => {
+                          dl(txt, fn);
+                          // Brief 600ms pause so the browser doesn't block "mass downloading"
+                          return new Promise(r => setTimeout(r, 600));
+                      }).catch(e => {
+                          console.warn("Sourcee asset fail:", url, e);
+                      });
+                  });
+              });
+
+              chain.then(() => {
+                  toast("Assets Downloaded!");
+                  toggleControls("idle");
+                  els.start.textContent = `Download (${checks.length})`;
+              }).catch(e => {
+                  toast("Stopped.");
+                  toggleControls("idle");
+                  els.start.textContent = `Download (${checks.length})`;
+              });
           }
         }
       } catch(e) { toast("Error: " + e.message); toggleControls("idle"); }
@@ -426,13 +586,10 @@
     els.fab.addEventListener("pointermove", e => {
       if(!els.fab.hasPointerCapture(e.pointerId)) return;
       const dx=e.clientX-startX, dy=e.clientY-startY;
-      
-      // Drag Threshold
       if(!isDrag && (Math.abs(dx) > 15 || Math.abs(dy) > 15)) {
           isDrag=true;
           wrap.style.right="auto"; wrap.style.bottom="auto";
       }
-      
       if (isDrag) {
           wrap.style.left=(sL+dx)+"px"; wrap.style.top=(sT+dy)+"px";
       }
@@ -449,6 +606,5 @@
       try { els.fab.releasePointerCapture(e.pointerId); } catch(err){}
       isDrag = false;
     });
-    
   }
 })();
