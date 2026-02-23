@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      3.8
-// @description  The ultimate HTML export tool. (Added Asset Inspector for Local Stitching)
+// @version      3.8.1
+// @description  The ultimate HTML export tool. (Asset Inspector + Syntax Fixes)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
@@ -15,13 +15,17 @@
   "use strict";
 
   function initSourcee() {
-    if (!document.body) { setTimeout(initSourcee, 100); return; }
+    if (!document.body) {
+        setTimeout(initSourcee, 100); 
+        return; 
+    }
     runScript();
   }
 
   function safeAddStyle(css) {
-    if (typeof GM_addStyle !== "undefined") { GM_addStyle(css); }
-    else {
+    if (typeof GM_addStyle !== "undefined") { 
+        GM_addStyle(css); 
+    } else {
       const style = document.createElement("style");
       style.textContent = css;
       document.head.appendChild(style);
@@ -34,14 +38,22 @@
     // ---------- Scaling Setup ----------
     const STORE_SCALE = "hx_scale_" + location.hostname;
     let isTouch = false;
-    try { isTouch = matchMedia("(pointer: coarse)").matches; } catch (e) {}
+    
+    try { 
+        isTouch = matchMedia("(pointer: coarse)").matches; 
+    } catch (e) {
+        // Ignored
+    }
 
     let uiScale = 1.0;
     try {
       const saved = parseFloat(localStorage.getItem(STORE_SCALE));
-      if (!isNaN(saved) && saved > 0) uiScale = saved;
-      else uiScale = isTouch ? 1.35 : 1.0;
-    } catch (e2) {
+      if (!isNaN(saved) && saved > 0) {
+          uiScale = saved;
+      } else {
+          uiScale = isTouch ? 1.35 : 1.0;
+      }
+    } catch (e) {
       uiScale = isTouch ? 1.35 : 1.0;
     }
 
@@ -111,26 +123,51 @@
     // ---------- Utilities ----------
     function toast(msg) {
       let el = document.getElementById("hx_toast");
-      if (!el) { el = document.createElement("div"); el.id = "hx_toast"; document.body.appendChild(el); }
-      el.textContent = msg; el.classList.add("show");
-      clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove("show"), 2500);
+      if (!el) { 
+          el = document.createElement("div"); 
+          el.id = "hx_toast"; 
+          document.body.appendChild(el); 
+      }
+      el.textContent = msg; 
+      el.classList.add("show");
+      clearTimeout(el._t); 
+      el._t = setTimeout(() => el.classList.remove("show"), 2500);
     }
-    function sanitize(s) { return (s||"page").replace(/^https?:\/\//i,"").replace(/[^\w.\-]+/g,"_").slice(0,120); }
-    function ts() { const d=new Date(), p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}`; }
+    
+    function sanitize(s) { 
+        return (s||"page").replace(/^https?:\/\//i,"").replace(/[^\w.\-]+/g,"_").slice(0,120); 
+    }
+    
+    function ts() { 
+        const d=new Date(), p=n=>String(n).padStart(2,"0"); 
+        return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}`; 
+    }
     
     function dl(txt, name) {
-      const b=new Blob([txt],{type:"text/plain"}), u=URL.createObjectURL(b), a=document.createElement("a");
-      a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),2000);
+      const b = new Blob([txt],{type:"text/plain"});
+      const u = URL.createObjectURL(b);
+      const a = document.createElement("a");
+      a.href = u; 
+      a.download = name; 
+      document.body.appendChild(a); 
+      a.click(); 
+      a.remove(); 
+      setTimeout(()=>URL.revokeObjectURL(u), 2000);
     }
     
     async function fetchTxt(url) {
       const r = await fetch(url, {cache:"no-store", credentials:"include"});
-      if(!r.ok) throw new Error(r.status); return await r.text();
+      if(!r.ok) {
+          throw new Error(r.status);
+      }
+      return await r.text();
     }
     
     function fetchCors(url) {
         return new Promise((resolve, reject) => {
-            if (typeof GM_xmlhttpRequest === "undefined") return reject("GM_xmlhttpRequest not granted");
+            if (typeof GM_xmlhttpRequest === "undefined") {
+                return reject("GM_xmlhttpRequest not granted");
+            }
             GM_xmlhttpRequest({
                 method: "GET",
                 url: url,
@@ -142,12 +179,18 @@
 
     function beautify(html) {
       const t = (html||"").replace(/>\s+</g,">\n<").replace(/\n{3,}/g,"\n\n");
-      let i=0,out=[];
+      let i = 0;
+      let out = [];
       for(const l of t.split("\n")) {
-        const tr=l.trim(); if(!tr) continue;
-        if(/^<\/[^>]+>/.test(tr)) i=Math.max(0,i-1);
-        out.push("  ".repeat(i)+tr);
-        if(/^<[^!/][^>]*[^/]>$/.test(tr) && !/^<(script|style|meta|link|img|br|hr)/i.test(tr)) i++;
+        const tr = l.trim(); 
+        if(!tr) continue;
+        if(/^<\/[^>]+>/.test(tr)) {
+            i = Math.max(0, i - 1);
+        }
+        out.push("  ".repeat(i) + tr);
+        if(/^<[^!/][^>]*[^/]>$/.test(tr) && !/^<(script|style|meta|link|img|br|hr)/i.test(tr)) {
+            i++;
+        }
       }
       return out.join("\n");
     }
@@ -156,21 +199,38 @@
     function getCleanDOM() {
         const clone = document.documentElement.cloneNode(true);
         const sourceeMenu = clone.querySelector("#hx_wrap");
-        if (sourceeMenu) sourceeMenu.remove();
+        if (sourceeMenu) {
+            sourceeMenu.remove();
+        }
         const sourceeToast = clone.querySelector("#hx_toast");
-        if (sourceeToast) sourceeToast.remove();
+        if (sourceeToast) {
+            sourceeToast.remove();
+        }
 
         clone.querySelectorAll("script, noscript, iframe, canvas, video, audio, picture").forEach(e => e.remove());
-        clone.querySelectorAll("svg").forEach(e => { if (e.innerHTML.length > 200) e.innerHTML = ""; });
+        clone.querySelectorAll("svg").forEach(e => { 
+            if (e.innerHTML.length > 200) {
+                e.innerHTML = ""; 
+            }
+        });
+        
         clone.querySelectorAll("img, source").forEach(e => {
-            if (e.src && e.src.startsWith("data:")) e.removeAttribute("src");
-            if (e.srcset) e.removeAttribute("srcset");
+            if (e.src && e.src.startsWith("data:")) {
+                e.removeAttribute("src");
+            }
+            if (e.srcset) {
+                e.removeAttribute("srcset");
+            }
         });
 
         clone.querySelectorAll('input[type="hidden"]').forEach(e => e.remove());
         clone.querySelectorAll('input:not([type="hidden"]), textarea').forEach(e => {
-            if (e.hasAttribute('value')) e.setAttribute('value', '[REDACTED]');
-            if (e.tagName.toLowerCase() === 'textarea') e.textContent = '[REDACTED]';
+            if (e.hasAttribute('value')) {
+                e.setAttribute('value', '[REDACTED]');
+            }
+            if (e.tagName.toLowerCase() === 'textarea') {
+                e.textContent = '[REDACTED]';
+            }
         });
         return clone.outerHTML;
     }
@@ -190,13 +250,20 @@
                 });
 
                 let attrString = ident.length > 0 ? ` [${ident.join(", ")}]` : " [Anonymous/Inline]";
-                let origin = "Vanilla Site / Unknown", originTag = "";
+                let origin = "Vanilla Site / Unknown";
+                let originTag = "";
                 
-                if (s.id && s.id.toLowerCase().includes("stylus")) { origin = "Stylus Theme"; originTag = "🎨 "; }
-                else if (s.className && s.className.toLowerCase().includes("stylus")) { origin = "Stylus Theme"; originTag = "🎨 "; }
-                else if (css.includes("display: none !important") && css.length > 500) { origin = "AdBlocker / Anti-Tracker"; originTag = "🛡️ "; }
-                else if (css.includes("--hx_scale")) { origin = "Sourcee Userscript"; originTag = "⚙️ "; }
-                else if (s.parentElement && s.parentElement.tagName.toLowerCase() === 'body') { origin = "Injected into <body> (Likely Userscript)"; originTag = "💉 "; }
+                if (s.id && s.id.toLowerCase().includes("stylus")) { 
+                    origin = "Stylus Theme"; originTag = "🎨 "; 
+                } else if (s.className && s.className.toLowerCase().includes("stylus")) { 
+                    origin = "Stylus Theme"; originTag = "🎨 "; 
+                } else if (css.includes("display: none !important") && css.length > 500) { 
+                    origin = "AdBlocker / Anti-Tracker"; originTag = "🛡️ "; 
+                } else if (css.includes("--hx_scale")) { 
+                    origin = "Sourcee Userscript"; originTag = "⚙️ "; 
+                } else if (s.parentElement && s.parentElement.tagName.toLowerCase() === 'body') { 
+                    origin = "Injected into <body> (Likely Userscript)"; originTag = "💉 "; 
+                }
 
                 md += `\n### Style Block ${i + 1} - ${originTag}${origin}${attrString}\n\`\`\`css\n${css}\n\`\`\`\n`;
             }
@@ -212,7 +279,9 @@
             try {
                 const cssText = await fetchCors(href);
                 md += `\`\`\`css\n${cssText.trim()}\n\`\`\`\n`;
-            } catch(e) { md += `> [Failed to fetch: CORS or network error]\n`; }
+            } catch(e) { 
+                md += `> [Failed to fetch: CORS or network error]\n`; 
+            }
         }
 
         md += `\n## 3. DOM SNAPSHOT (Sanitized for AI Context)\n`;
@@ -222,11 +291,16 @@
 
     // ---------- Self-Contained Logic ----------
     async function fetchBase64(url, signal) {
-      if(signal?.aborted) throw new Error("STOP");
+      if(signal?.aborted) {
+          throw new Error("STOP");
+      }
       const r = await fetch(url, {signal, cache:"no-store", credentials:"include"});
       const b = await r.blob();
       return new Promise((res,rej)=>{
-        const fr=new FileReader(); fr.onload=()=>res(fr.result); fr.onerror=rej; fr.readAsDataURL(b);
+        const fr = new FileReader(); 
+        fr.onload = () => res(fr.result); 
+        fr.onerror = rej; 
+        fr.readAsDataURL(b);
       });
     }
 
@@ -235,25 +309,32 @@
       const imgs = Array.from(doc.querySelectorAll("img")).filter(i=>!i.src.startsWith("data:"));
       const total = limit>0 ? Math.min(limit, imgs.length) : imgs.length;
       onProg(0, total);
-      let count=0;
+      let count = 0;
       for(const img of imgs) {
         if(count >= total) break;
-        if(signal?.aborted) return {html:doc.documentElement.outerHTML, stopped:true};
+        if(signal?.aborted) {
+            return {html:doc.documentElement.outerHTML, stopped:true};
+        }
         try {
           const abs = new URL(img.getAttribute("src"), location.href).href;
           const b64 = await fetchBase64(abs, signal);
           img.setAttribute("src", b64);
-          img.removeAttribute("srcset"); img.removeAttribute("loading");
+          img.removeAttribute("srcset"); 
+          img.removeAttribute("loading");
         } catch(e) { 
-          if(signal?.aborted) return {html:doc.documentElement.outerHTML, stopped:true};
+          if(signal?.aborted) {
+              return {html:doc.documentElement.outerHTML, stopped:true};
+          }
         }
-        count++; onProg(count, total);
+        count++; 
+        onProg(count, total);
       }
       return {html:doc.documentElement.outerHTML, stopped:false};
     }
 
     // ---------- UI Construction ----------
-    const wrap = document.createElement("div"); wrap.id="hx_wrap";
+    const wrap = document.createElement("div"); 
+    wrap.id="hx_wrap";
     wrap.innerHTML = `
       <div id="hx_fab">Sourcee <span>▾</span></div>
       <div id="hx_menu">
@@ -286,7 +367,7 @@
     `;
     document.body.appendChild(wrap);
 
-    // ---------- Logic Binding ----------
+      // ---------- Logic Binding ----------
     const els = {
       fab: wrap.querySelector("#hx_fab"),
       menu: wrap.querySelector("#hx_menu"),
@@ -309,18 +390,28 @@
     let ac = null;
     let partialRes = null;
 
-    els.ts.onclick = () => { useTs=!useTs; els.ts.textContent = `Time: ${useTs?"ON":"OFF"}`; };
+    els.ts.onclick = () => { 
+        useTs = !useTs; 
+        els.ts.textContent = `Time: ${useTs ? "ON" : "OFF"}`; 
+    };
 
     els.scale.onclick = () => {
       const steps = [1.0, 1.15, 1.35, 1.5, 1.7];
       let idx = 0;
       for (let i = 0; i < steps.length; i++) {
-        if (Math.abs(steps[i] - uiScale) < 0.02) { idx = i; break; }
+        if (Math.abs(steps[i] - uiScale) < 0.02) { 
+            idx = i; 
+            break; 
+        }
       }
       uiScale = steps[(idx + 1) % steps.length];
       document.documentElement.style.setProperty("--hx_scale", String(uiScale));
       els.scale.textContent = `UI: ${Math.round(uiScale * 100)}%`;
-      try { localStorage.setItem(STORE_SCALE, String(uiScale)); } catch (e2) {}
+      try { 
+          localStorage.setItem(STORE_SCALE, String(uiScale)); 
+      } catch (e) {
+          // Ignored
+      }
       toast(`UI scaled to ${Math.round(uiScale * 100)}%`);
     };
 
@@ -334,130 +425,48 @@
         }
     });
 
-    function getFN(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`; }
-    function getFNTxt(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.md`; }
+    function getFN(suffix) { 
+        return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`; 
+    }
+    
+    function getFNTxt(suffix) { 
+        return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.md`; 
+    }
 
     function toggleControls(state) {
         if (state === "running") {
-            els.stop.classList.remove("disabled"); els.mode.disabled = true;
+            els.stop.classList.remove("disabled"); 
+            els.mode.disabled = true;
         } else {
             els.start.classList.remove("disabled", "working");
-            // Only reset to "Start" if we aren't in the middle of looking at assets
             if (els.mode.value !== "assets" || els.assetBox.style.display === "none") {
                 els.start.textContent = els.mode.value === "assets" ? "Scan Assets" : "Start";
             }
-            els.stop.classList.add("disabled"); els.mode.disabled = false;
+            els.stop.classList.add("disabled"); 
+            els.mode.disabled = false;
         }
     }
 
     els.start.onclick = async () => {
-      if (els.start.classList.contains("working") || els.start.classList.contains("disabled")) return;
-      const mode = els.mode.value, lim = parseInt(els.limit.value)||0;
-      
-      try {
-        if(mode === "fetch") {
-          toast("Fetching..."); dl(await fetchTxt(location.href), getFN("source"));
-        } else if(mode === "dom") {
-          toast("Snapshotting..."); dl("<!doctype html>\n"+document.documentElement.outerHTML, getFN("dom"));
-        } else if(mode === "pretty") {
-          toast("Beautifying..."); dl(beautify(await fetchTxt(location.href)), getFN("pretty"));
-        } else if(mode === "devdump") {
-          toggleControls("running");
-          els.start.classList.add("working");
-          els.start.textContent = "Scraping...";
-          
-          const mdData = await buildDevDump((c,t) => { els.start.textContent = `CSS ${c}/${t}`; });
-          dl(mdData, getFNTxt("AI_CONTEXT"));
-          toast("Dev Dump Saved!");
-          toggleControls("idle");
-        } else if(mode === "self") {
-          ac = new AbortController(); toggleControls("running");
-          els.start.classList.add("working"); els.start.textContent = "Prep...";
-
-          const res = await processImages(document.documentElement.outerHTML, lim, ac.signal, (c,t) => els.start.textContent = `Img ${c}/${t}`);
-          if(res.stopped) {
-             partialRes = res.html; els.mainBtns.style.display = "none";
-             els.partials.style.display = "flex"; toast("Stopped.");
-          } else {
-             dl(res.html, getFN("self")); toast("Done!"); toggleControls("idle");
-          }
-        } else if(mode === "assets") {
-          // --- ASSET INSPECTOR MODE ---
-    // ---------- Logic Binding ----------
-    const els = {
-      fab: wrap.querySelector("#hx_fab"),
-      menu: wrap.querySelector("#hx_menu"),
-      name: wrap.querySelector("#hx_name"),
-      mode: wrap.querySelector("#hx_mode"),
-      start: wrap.querySelector("#hx_start"),
-      stop: wrap.querySelector("#hx_stop"),
-      limit: wrap.querySelector("#hx_limit"),
-      ts: wrap.querySelector("#hx_ts"),
-      scale: wrap.querySelector("#hx_scale"),
-      partials: wrap.querySelector("#hx_partials"),
-      saveP: wrap.querySelector("#hx_save_p"),
-      discP: wrap.querySelector("#hx_disc_p"),
-      mainBtns: wrap.querySelector("#hx_main_row"),
-      assetBox: wrap.querySelector("#hx_asset_box")
-    };
-
-    els.name.value = sanitize(location.hostname + location.pathname);
-    let useTs = true;
-    let ac = null;
-    let partialRes = null;
-
-    els.ts.onclick = () => { useTs=!useTs; els.ts.textContent = `Time: ${useTs?"ON":"OFF"}`; };
-
-    els.scale.onclick = () => {
-      const steps = [1.0, 1.15, 1.35, 1.5, 1.7];
-      let idx = 0;
-      for (let i = 0; i < steps.length; i++) {
-        if (Math.abs(steps[i] - uiScale) < 0.02) { idx = i; break; }
+      if (els.start.classList.contains("working") || els.start.classList.contains("disabled")) {
+          return;
       }
-      uiScale = steps[(idx + 1) % steps.length];
-      document.documentElement.style.setProperty("--hx_scale", String(uiScale));
-      els.scale.textContent = `UI: ${Math.round(uiScale * 100)}%`;
-      try { localStorage.setItem(STORE_SCALE, String(uiScale)); } catch (e2) {}
-      toast(`UI scaled to ${Math.round(uiScale * 100)}%`);
-    };
-
-    els.mode.addEventListener("change", () => {
-        els.assetBox.style.display = "none";
-        els.assetBox.innerHTML = "";
-        if (els.mode.value === "assets") {
-            els.start.textContent = "Scan Assets";
-        } else {
-            els.start.textContent = "Start";
-        }
-    });
-
-    function getFN(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`; }
-    function getFNTxt(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.md`; }
-
-    function toggleControls(state) {
-        if (state === "running") {
-            els.stop.classList.remove("disabled"); els.mode.disabled = true;
-        } else {
-            els.start.classList.remove("disabled", "working");
-            // Only reset to "Start" if we aren't in the middle of looking at assets
-            if (els.mode.value !== "assets" || els.assetBox.style.display === "none") {
-                els.start.textContent = els.mode.value === "assets" ? "Scan Assets" : "Start";
-            }
-            els.stop.classList.add("disabled"); els.mode.disabled = false;
-        }
-    }
-
-    els.start.onclick = async () => {
-      if (els.start.classList.contains("working") || els.start.classList.contains("disabled")) return;
-      const mode = els.mode.value, lim = parseInt(els.limit.value)||0;
+      const mode = els.mode.value;
+      const lim = parseInt(els.limit.value) || 0;
       
       try {
         if(mode === "fetch") {
-          toast("Fetching..."); dl(await fetchTxt(location.href), getFN("source"));
+          toast("Fetching..."); 
+          dl(await fetchTxt(location.href), getFN("source"));
+          
         } else if(mode === "dom") {
-          toast("Snapshotting..."); dl("<!doctype html>\n"+document.documentElement.outerHTML, getFN("dom"));
+          toast("Snapshotting..."); 
+          dl("<!doctype html>\n"+document.documentElement.outerHTML, getFN("dom"));
+          
         } else if(mode === "pretty") {
-          toast("Beautifying..."); dl(beautify(await fetchTxt(location.href)), getFN("pretty"));
+          toast("Beautifying..."); 
+          dl(beautify(await fetchTxt(location.href)), getFN("pretty"));
+          
         } else if(mode === "devdump") {
           toggleControls("running");
           els.start.classList.add("working");
@@ -467,30 +476,44 @@
           dl(mdData, getFNTxt("AI_CONTEXT"));
           toast("Dev Dump Saved!");
           toggleControls("idle");
+          
         } else if(mode === "self") {
-          ac = new AbortController(); toggleControls("running");
-          els.start.classList.add("working"); els.start.textContent = "Prep...";
+          ac = new AbortController(); 
+          toggleControls("running");
+          els.start.classList.add("working"); 
+          els.start.textContent = "Prep...";
 
           const res = await processImages(document.documentElement.outerHTML, lim, ac.signal, (c,t) => els.start.textContent = `Img ${c}/${t}`);
           if(res.stopped) {
-             partialRes = res.html; els.mainBtns.style.display = "none";
-             els.partials.style.display = "flex"; toast("Stopped.");
+             partialRes = res.html; 
+             els.mainBtns.style.display = "none";
+             els.partials.style.display = "flex"; 
+             toast("Stopped.");
           } else {
-             dl(res.html, getFN("self")); toast("Done!"); toggleControls("idle");
+             dl(res.html, getFN("self")); 
+             toast("Done!"); 
+             toggleControls("idle");
           }
+          
         } else if(mode === "assets") {
           // --- ASSET INSPECTOR MODE ---
           if (els.assetBox.style.display === "none" || els.assetBox.innerHTML === "") {
               // 1. SCAN PHASE
               let assets = [];
               document.querySelectorAll('link[rel="stylesheet"]').forEach(el => {
-                  if (el.href) assets.push({ type: 'css', url: el.href });
+                  if (el.href) {
+                      assets.push({ type: 'css', url: el.href });
+                  }
               });
               document.querySelectorAll('script[src]').forEach(el => {
-                  if (el.src) assets.push({ type: 'js', url: el.src });
+                  if (el.src) {
+                      assets.push({ type: 'js', url: el.src });
+                  }
               });
               
-              if (assets.length === 0) return toast("No external CSS/JS found.");
+              if (assets.length === 0) {
+                  return toast("No external CSS/JS found.");
+              }
 
               els.assetBox.innerHTML = "";
               assets.forEach((a, i) => {
@@ -498,8 +521,12 @@
                   try {
                       let urlObj = new URL(a.url, location.href);
                       let parts = urlObj.pathname.split('/');
-                      if (parts[parts.length - 1]) fn = parts[parts.length - 1];
-                  } catch (e) {}
+                      if (parts[parts.length - 1]) {
+                          fn = parts[parts.length - 1];
+                      }
+                  } catch (e) {
+                      // Ignored
+                  }
                   
                   let lbl = document.createElement("label");
                   lbl.className = "hx_asset_item";
@@ -513,7 +540,9 @@
           } else {
               // 2. DOWNLOAD PHASE
               let checks = Array.from(els.assetBox.querySelectorAll('input:checked'));
-              if (checks.length === 0) return toast("No assets selected.");
+              if (checks.length === 0) {
+                  return toast("No assets selected.");
+              }
 
               ac = new AbortController();
               toggleControls("running");
@@ -522,14 +551,15 @@
               let chain = Promise.resolve();
               checks.forEach((chk, idx) => {
                   chain = chain.then(() => {
-                      if (ac && ac.signal.aborted) throw new Error("STOP");
+                      if (ac && ac.signal.aborted) {
+                          throw new Error("STOP");
+                      }
                       els.start.textContent = `Fetching ${idx + 1}/${checks.length}`;
                       let url = chk.getAttribute("data-url");
-                      let fn = chk.getAttribute("data-fn"); // Using EXACT filename for local stitching
+                      let fn = chk.getAttribute("data-fn"); 
                       
                       return fetchCors(url).then(txt => {
                           dl(txt, fn);
-                          // Brief 600ms pause so the browser doesn't block "mass downloading"
                           return new Promise(r => setTimeout(r, 600));
                       }).catch(e => {
                           console.warn("Sourcee asset fail:", url, e);
@@ -548,45 +578,113 @@
               });
           }
         }
-      } catch(e) { toast("Error: " + e.message); toggleControls("idle"); }
+      } catch(e) { 
+          toast("Error: " + e.message); 
+          toggleControls("idle"); 
+      }
     };
 
     els.stop.onclick = () => ac?.abort();
-    els.saveP.onclick = () => { if(partialRes) dl(partialRes, getFN("partial")); resetPartials(); };
+    
+    els.saveP.onclick = () => { 
+        if(partialRes) {
+            dl(partialRes, getFN("partial")); 
+        }
+        resetPartials(); 
+    };
+    
     els.discP.onclick = resetPartials;
-    function resetPartials() { partialRes = null; ac = null; els.partials.style.display = "none"; els.mainBtns.style.display = "flex"; toggleControls("idle"); }
+    
+    function resetPartials() { 
+        partialRes = null; 
+        ac = null; 
+        els.partials.style.display = "none"; 
+        els.mainBtns.style.display = "flex"; 
+        toggleControls("idle"); 
+    }
 
     // ---------- Draggable Logic ----------
-    let isDrag = false, startX, startY, sL, sT; const store = "hx_pos_"+location.hostname;
-    try { const p=JSON.parse(localStorage.getItem(store)); if(p) { wrap.style.left=p.x+"px"; wrap.style.top=p.y+"px"; wrap.style.right="auto"; wrap.style.bottom="auto"; } } catch(_){}
+    let isDrag = false, startX, startY, sL, sT; 
+    const store = "hx_pos_"+location.hostname;
+    
+    try { 
+        const p=JSON.parse(localStorage.getItem(store)); 
+        if(p) { 
+            wrap.style.left = p.x + "px"; 
+            wrap.style.top = p.y + "px"; 
+            wrap.style.right = "auto"; 
+            wrap.style.bottom = "auto"; 
+        } 
+    } catch(e) {
+        // Ignored
+    }
     
     els.fab.addEventListener("pointerdown", e => {
-      if(e.button!==0)return; els.fab.setPointerCapture(e.pointerId);
-      isDrag=false; startX=e.clientX; startY=e.clientY;
-      const r=wrap.getBoundingClientRect(); sL=r.left; sT=r.top;
+      if(e.button !== 0) return; 
+      
+      try {
+          els.fab.setPointerCapture(e.pointerId);
+      } catch (e) {
+          // Ignored
+      }
+      
+      isDrag = false; 
+      startX = e.clientX; 
+      startY = e.clientY;
+      const r = wrap.getBoundingClientRect(); 
+      sL = r.left; 
+      sT = r.top;
     });
     
     els.fab.addEventListener("pointermove", e => {
-      if(!els.fab.hasPointerCapture(e.pointerId)) return;
-      const dx=e.clientX-startX, dy=e.clientY-startY;
+      try {
+          if(!els.fab.hasPointerCapture(e.pointerId)) return;
+      } catch (e) {
+          // Ignored
+      }
+      
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      
       if(!isDrag && (Math.abs(dx) > 15 || Math.abs(dy) > 15)) {
-          isDrag=true;
-          wrap.style.right="auto"; wrap.style.bottom="auto";
+          isDrag = true;
+          wrap.style.right = "auto"; 
+          wrap.style.bottom = "auto";
       }
       if (isDrag) {
-          wrap.style.left=(sL+dx)+"px"; wrap.style.top=(sT+dy)+"px";
+          wrap.style.left = (sL + dx) + "px"; 
+          wrap.style.top = (sT + dy) + "px";
       }
     });
     
     els.fab.addEventListener("pointerup", e => {
-      try { els.fab.releasePointerCapture(e.pointerId); } catch(err){}
-      if(isDrag) localStorage.setItem(store, JSON.stringify({x:parseFloat(wrap.style.left), y:parseFloat(wrap.style.top)}));
-      else els.menu.classList.toggle("show");
+      try { 
+          els.fab.releasePointerCapture(e.pointerId); 
+      } catch(err) {
+          // Ignored
+      }
+      
+      if(isDrag) {
+          try {
+              localStorage.setItem(store, JSON.stringify({
+                  x: parseFloat(wrap.style.left), 
+                  y: parseFloat(wrap.style.top)
+              }));
+          } catch (e) {
+              // Ignored
+          }
+      } else {
+          els.menu.classList.toggle("show");
+      }
       isDrag = false;
     });
 
     els.fab.addEventListener("pointercancel", e => {
-      try { els.fab.releasePointerCapture(e.pointerId); } catch(err){}
+      try { 
+          els.fab.releasePointerCapture(e.pointerId); 
+      } catch(err) {
+          // Ignored
+      }
       isDrag = false;
     });
   }
