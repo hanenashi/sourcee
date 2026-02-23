@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      3.7
-// @description  The ultimate HTML export tool. (Smart AI Dump labeling + UI Scaling + Safe Auth)
+// @version      3.8
+// @description  The ultimate HTML export tool. (Added Asset Inspector for Local Stitching)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
@@ -40,83 +40,73 @@
     try {
       const saved = parseFloat(localStorage.getItem(STORE_SCALE));
       if (!isNaN(saved) && saved > 0) uiScale = saved;
-      else uiScale = isTouch ? 1.35 : 1.0; // Auto-boost size on phones
+      else uiScale = isTouch ? 1.35 : 1.0;
     } catch (e2) {
       uiScale = isTouch ? 1.35 : 1.0;
     }
 
     // ---------- UI Styles ----------
-    safeAddStyle(`
-      :root {
-        --hx_scale: ${uiScale};
-      }
-
-      #hx_wrap {
-        position: fixed; right: 12px; bottom: 80px; z-index: 2147483647;
-        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-        font-size: calc(13px * var(--hx_scale));
-        line-height: 1.2;
-        color: #fff;
-        user-select: none; touch-action: none; max-width: 100vw;
-      }
+    safeAddStyle(
+      ":root{--hx_scale:" + uiScale + ";}\n" +
+      "#hx_wrap{position:fixed;right:12px;bottom:80px;z-index:2147483647;" +
+      "font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;" +
+      "font-size:calc(13px*var(--hx_scale));line-height:1.2;" +
+      "color:#fff;user-select:none;touch-action:none;max-width:100vw;}\n" +
       
-      #hx_fab {
-        display: inline-flex; align-items: center; gap: 8px; 
-        padding: calc(10px * var(--hx_scale)) calc(14px * var(--hx_scale));
-        border-radius: 24px; border: 1px solid rgba(255,255,255,0.18);
-        background: rgba(20,20,20,0.85); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.4); cursor: pointer;
-      }
+      "#hx_fab{display:inline-flex;align-items:center;gap:8px;" +
+      "padding:calc(10px*var(--hx_scale)) calc(14px*var(--hx_scale));" +
+      "border-radius:24px;border:1px solid rgba(255,255,255,0.18);" +
+      "background:rgba(20,20,20,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);" +
+      "box-shadow:0 4px 12px rgba(0,0,0,0.4);cursor:pointer;}\n" +
       
-      #hx_menu {
-        margin-top: 12px; width: min(calc(300px * var(--hx_scale)), 90vw); border-radius: 16px;
-        border: 1px solid rgba(255,255,255,0.14); background: rgba(25,25,25,0.95);
-        backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-        box-shadow: 0 16px 40px rgba(0,0,0,0.6); padding: calc(12px * var(--hx_scale));
-        display: none; flex-direction: column; gap: calc(10px * var(--hx_scale));
-      }
-      #hx_menu.show { display: flex; }
+      "#hx_menu{margin-top:12px;width:min(calc(300px*var(--hx_scale)),90vw);border-radius:16px;" +
+      "border:1px solid rgba(255,255,255,0.14);background:rgba(25,25,25,0.95);" +
+      "backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);" +
+      "box-shadow:0 16px 40px rgba(0,0,0,0.6);padding:calc(12px*var(--hx_scale));" +
+      "display:none;flex-direction:column;gap:calc(10px*var(--hx_scale));}\n" +
+      "#hx_menu.show{display:flex;}\n" +
 
-      .hx_field, .hx_select {
-        width: 100%; box-sizing: border-box; padding: calc(10px * var(--hx_scale)); border-radius: 8px;
-        border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.3);
-        color: #fff; outline: none; font-size: calc(13px * var(--hx_scale));
-      }
+      ".hx_field,.hx_select{width:100%;box-sizing:border-box;padding:calc(10px*var(--hx_scale));border-radius:8px;" +
+      "border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.3);" +
+      "color:#fff;outline:none;font-size:calc(13px*var(--hx_scale));}\n" +
       
-      .hx_select { appearance: auto; }
-      .hx_select option { background: #333; }
+      ".hx_select{appearance:auto;}\n" +
+      ".hx_select option{background:#333;}\n" +
 
-      .hx_row { display: flex; gap: calc(8px * var(--hx_scale)); }
+      ".hx_row{display:flex;gap:calc(8px*var(--hx_scale));}\n" +
       
-      .hx_btn {
-        flex: 1; padding: calc(10px * var(--hx_scale)); border-radius: 8px; border: 1px solid rgba(255,255,255,0.12);
-        background: rgba(255,255,255,0.08); color: #eee; cursor: pointer;
-        text-align: center; font-weight: 600; transition: all 0.2s;
-      }
-      .hx_btn.primary { background: rgba(80, 160, 255, 0.25); border-color: rgba(80, 160, 255, 0.4); color: #fff; }
-      .hx_btn.danger { background: rgba(255,80,80,0.25); border-color: rgba(255,80,80,0.4); color: #ffcccc; }
-      .hx_btn.disabled { opacity: 0.4; pointer-events: none; }
-      .hx_btn.working {
-        background: rgba(255, 170, 0, 0.3) !important; border-color: rgba(255, 170, 0, 0.6) !important;
-        color: #fff !important; opacity: 1 !important; pointer-events: none;
-        animation: hx_pulse 1.5s infinite ease-in-out;
-      }
-      @keyframes hx_pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+      ".hx_btn{flex:1;padding:calc(10px*var(--hx_scale));border-radius:8px;border:1px solid rgba(255,255,255,0.12);" +
+      "background:rgba(255,255,255,0.08);color:#eee;cursor:pointer;" +
+      "text-align:center;font-weight:600;transition:all 0.2s;}\n" +
+      ".hx_btn.primary{background:rgba(80,160,255,0.25);border-color:rgba(80,160,255,0.4);color:#fff;}\n" +
+      ".hx_btn.danger{background:rgba(255,80,80,0.25);border-color:rgba(255,80,80,0.4);color:#ffcccc;}\n" +
+      ".hx_btn.disabled{opacity:0.4;pointer-events:none;}\n" +
+      ".hx_btn.working{background:rgba(255,170,0,0.3)!important;border-color:rgba(255,170,0,0.6)!important;" +
+      "color:#fff!important;opacity:1!important;pointer-events:none;animation:hx_pulse 1.5s infinite ease-in-out;}\n" +
+      "@keyframes hx_pulse{0%{opacity:1;}50%{opacity:0.7;}100%{opacity:1;}}\n" +
 
-      .hx_settings { display: flex; align-items: center; justify-content: space-between; font-size: calc(11px * var(--hx_scale)); opacity: 0.8; padding: 0 4px; }
-      .hx_tiny_inp { width: calc(50px * var(--hx_scale)); padding: calc(4px * var(--hx_scale)); border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #fff; text-align: center; font-size: calc(12px * var(--hx_scale)); }
-      .hx_clickable { cursor: pointer; text-decoration: underline; }
+      /* Asset Inspector Checklist Styles */
+      "#hx_asset_box{display:none;max-height:calc(160px*var(--hx_scale));overflow-y:auto;" +
+      "background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.1);border-radius:8px;" +
+      "padding:calc(8px*var(--hx_scale));font-size:calc(11px*var(--hx_scale));flex-direction:column;gap:6px;}\n" +
+      ".hx_asset_item{display:flex;align-items:center;gap:8px;word-break:break-all;line-height:1.3;cursor:pointer;}\n" +
+      ".hx_asset_item input{margin:0;width:calc(16px*var(--hx_scale));height:calc(16px*var(--hx_scale));accent-color:#50a0ff;flex-shrink:0;}\n" +
+      ".hx_badge{padding:2px 5px;border-radius:4px;font-weight:bold;font-size:calc(9px*var(--hx_scale));flex-shrink:0;text-transform:uppercase;}\n" +
+      ".hx_badge.css{background:#2962ff;color:#fff;}\n" +
+      ".hx_badge.js{background:#ffd600;color:#000;}\n" +
 
-      #hx_toast {
-        position: fixed; left: 50%; bottom: 100px; transform: translateX(-50%) translateY(20px);
-        z-index: 2147483647; padding: calc(10px * var(--hx_scale)) calc(16px * var(--hx_scale)); border-radius: 20px;
-        background: rgba(20,20,20,0.9); border: 1px solid rgba(255,255,255,0.1);
-        backdrop-filter: blur(4px); opacity: 0; pointer-events: none;
-        transition: opacity .2s, transform .2s; color: #fff; font-weight: 600;
-        font-size: calc(13px * var(--hx_scale));
-      }
-      #hx_toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-    `);
+      ".hx_settings{display:flex;align-items:center;justify-content:space-between;font-size:calc(11px*var(--hx_scale));opacity:0.8;padding:0 4px;}\n" +
+      ".hx_tiny_inp{width:calc(50px*var(--hx_scale));padding:calc(4px*var(--hx_scale));border-radius:4px;border:1px solid rgba(255,255,255,0.2);background:transparent;color:#fff;text-align:center;font-size:calc(12px*var(--hx_scale));}\n" +
+      ".hx_clickable{cursor:pointer;text-decoration:underline;}\n" +
+
+      "#hx_toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(20px);" +
+      "z-index:2147483647;padding:calc(10px*var(--hx_scale)) calc(16px*var(--hx_scale));border-radius:20px;" +
+      "background:rgba(20,20,20,0.9);border:1px solid rgba(255,255,255,0.1);" +
+      "backdrop-filter:blur(4px);opacity:0;pointer-events:none;" +
+      "transition:opacity .2s, transform .2s;color:#fff;font-weight:600;" +
+      "font-size:calc(13px*var(--hx_scale));}\n" +
+      "#hx_toast.show{opacity:1;transform:translateX(-50%) translateY(0);}\n"
+    );
 
     // ---------- Utilities ----------
     function toast(msg) {
@@ -127,16 +117,17 @@
     }
     function sanitize(s) { return (s||"page").replace(/^https?:\/\//i,"").replace(/[^\w.\-]+/g,"_").slice(0,120); }
     function ts() { const d=new Date(), p=n=>String(n).padStart(2,"0"); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}`; }
+    
     function dl(txt, name) {
       const b=new Blob([txt],{type:"text/plain"}), u=URL.createObjectURL(b), a=document.createElement("a");
       a.href=u; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(u),2000);
     }
+    
     async function fetchTxt(url) {
       const r = await fetch(url, {cache:"no-store", credentials:"include"});
       if(!r.ok) throw new Error(r.status); return await r.text();
     }
     
-    // Wrapped GM_xmlhttpRequest for cross-origin CSS fetching
     function fetchCors(url) {
         return new Promise((resolve, reject) => {
             if (typeof GM_xmlhttpRequest === "undefined") return reject("GM_xmlhttpRequest not granted");
@@ -164,43 +155,33 @@
     // ---------- Dev Dump Logic ----------
     function getCleanDOM() {
         const clone = document.documentElement.cloneNode(true);
-        
-        // Remove Sourcee UI
         const sourceeMenu = clone.querySelector("#hx_wrap");
         if (sourceeMenu) sourceeMenu.remove();
         const sourceeToast = clone.querySelector("#hx_toast");
         if (sourceeToast) sourceeToast.remove();
 
-        // Strip heavy/unnecessary tags
         clone.querySelectorAll("script, noscript, iframe, canvas, video, audio, picture").forEach(e => e.remove());
         clone.querySelectorAll("svg").forEach(e => { if (e.innerHTML.length > 200) e.innerHTML = ""; });
-        
-        // Strip base64 images
         clone.querySelectorAll("img, source").forEach(e => {
             if (e.src && e.src.startsWith("data:")) e.removeAttribute("src");
             if (e.srcset) e.removeAttribute("srcset");
         });
 
-        // PRIVACY REDACTION: Strip hidden inputs (CSRF tokens) and form values
         clone.querySelectorAll('input[type="hidden"]').forEach(e => e.remove());
         clone.querySelectorAll('input:not([type="hidden"]), textarea').forEach(e => {
             if (e.hasAttribute('value')) e.setAttribute('value', '[REDACTED]');
             if (e.tagName.toLowerCase() === 'textarea') e.textContent = '[REDACTED]';
         });
-
         return clone.outerHTML;
     }
 
     async function buildDevDump(onProg) {
         let md = `# AI DEV DUMP: ${location.href}\n\n`;
-
-        // 1. Injected/Inline Styles (Now with heuristics!)
         md += `## 1. INLINE & INJECTED STYLES (<style>)\n`;
         const styles = document.querySelectorAll("style");
         styles.forEach((s, i) => {
             const css = s.textContent.trim();
             if (css) {
-                // 1. Gather identifying attributes (id, class, data-*)
                 let ident = [];
                 if (s.id) ident.push(`id="${s.id}"`);
                 if (s.className) ident.push(`class="${s.className}"`);
@@ -209,33 +190,18 @@
                 });
 
                 let attrString = ident.length > 0 ? ` [${ident.join(", ")}]` : " [Anonymous/Inline]";
-
-                // 2. Heuristics: Guess the origin based on attributes or CSS content
-                let origin = "Vanilla Site / Unknown";
-                let originTag = "";
+                let origin = "Vanilla Site / Unknown", originTag = "";
                 
-                if (s.id && s.id.toLowerCase().includes("stylus")) {
-                    origin = "Stylus Theme";
-                    originTag = "🎨 ";
-                } else if (s.className && s.className.toLowerCase().includes("stylus")) {
-                    origin = "Stylus Theme";
-                    originTag = "🎨 ";
-                } else if (css.includes("display:none!important") && css.length > 500) {
-                    origin = "AdBlocker / Anti-Tracker";
-                    originTag = "🛡️ ";
-                } else if (css.includes("--hx_scale")) {
-                    origin = "Sourcee Userscript";
-                    originTag = "⚙️ ";
-                } else if (s.parentElement && s.parentElement.tagName.toLowerCase() === 'body') {
-                    origin = "Injected into <body> (Likely Userscript)";
-                    originTag = "💉 ";
-                }
+                if (s.id && s.id.toLowerCase().includes("stylus")) { origin = "Stylus Theme"; originTag = "🎨 "; }
+                else if (s.className && s.className.toLowerCase().includes("stylus")) { origin = "Stylus Theme"; originTag = "🎨 "; }
+                else if (css.includes("display: none !important") && css.length > 500) { origin = "AdBlocker / Anti-Tracker"; originTag = "🛡️ "; }
+                else if (css.includes("--hx_scale")) { origin = "Sourcee Userscript"; originTag = "⚙️ "; }
+                else if (s.parentElement && s.parentElement.tagName.toLowerCase() === 'body') { origin = "Injected into <body> (Likely Userscript)"; originTag = "💉 "; }
 
                 md += `\n### Style Block ${i + 1} - ${originTag}${origin}${attrString}\n\`\`\`css\n${css}\n\`\`\`\n`;
             }
         });
 
-        // 2. External Stylesheets
         md += `\n## 2. EXTERNAL STYLESHEETS (<link rel="stylesheet">)\n`;
         const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
         for (let i = 0; i < links.length; i++) {
@@ -246,15 +212,11 @@
             try {
                 const cssText = await fetchCors(href);
                 md += `\`\`\`css\n${cssText.trim()}\n\`\`\`\n`;
-            } catch(e) {
-                md += `> [Failed to fetch: CORS or network error]\n`;
-            }
+            } catch(e) { md += `> [Failed to fetch: CORS or network error]\n`; }
         }
 
-        // 3. Cleaned DOM
         md += `\n## 3. DOM SNAPSHOT (Sanitized for AI Context)\n`;
         md += `\`\`\`html\n${beautify(getCleanDOM())}\n\`\`\`\n`;
-
         return md;
     }
 
@@ -284,7 +246,6 @@
           img.removeAttribute("srcset"); img.removeAttribute("loading");
         } catch(e) { 
           if(signal?.aborted) return {html:doc.documentElement.outerHTML, stopped:true};
-          console.warn(e); 
         }
         count++; onProg(count, total);
       }
@@ -303,8 +264,12 @@
           <option value="pretty">Beautify Fetch (.html)</option>
           <option value="self">Self-Contained Img (.html)</option>
           <option value="devdump">AI Context Dump (.md)</option>
+          <option value="assets">Asset Inspector (.js/.css)</option>
         </select>
-        <div class="hx_row">
+        
+        <div id="hx_asset_box"></div>
+
+        <div class="hx_row" id="hx_main_row">
           <div id="hx_start" class="hx_btn primary">Start</div>
           <div id="hx_stop" class="hx_btn danger disabled">Stop</div>
         </div>
@@ -335,7 +300,8 @@
       partials: wrap.querySelector("#hx_partials"),
       saveP: wrap.querySelector("#hx_save_p"),
       discP: wrap.querySelector("#hx_disc_p"),
-      mainBtns: wrap.querySelector(".hx_row")
+      mainBtns: wrap.querySelector("#hx_main_row"),
+      assetBox: wrap.querySelector("#hx_asset_box")
     };
 
     els.name.value = sanitize(location.hostname + location.pathname);
@@ -345,7 +311,6 @@
 
     els.ts.onclick = () => { useTs=!useTs; els.ts.textContent = `Time: ${useTs?"ON":"OFF"}`; };
 
-    // Scale Cycling Logic
     els.scale.onclick = () => {
       const steps = [1.0, 1.15, 1.35, 1.5, 1.7];
       let idx = 0;
@@ -359,6 +324,16 @@
       toast(`UI scaled to ${Math.round(uiScale * 100)}%`);
     };
 
+    els.mode.addEventListener("change", () => {
+        els.assetBox.style.display = "none";
+        els.assetBox.innerHTML = "";
+        if (els.mode.value === "assets") {
+            els.start.textContent = "Scan Assets";
+        } else {
+            els.start.textContent = "Start";
+        }
+    });
+
     function getFN(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`; }
     function getFNTxt(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.md`; }
 
@@ -367,7 +342,10 @@
             els.stop.classList.remove("disabled"); els.mode.disabled = true;
         } else {
             els.start.classList.remove("disabled", "working");
-            els.start.textContent = "Start";
+            // Only reset to "Start" if we aren't in the middle of looking at assets
+            if (els.mode.value !== "assets" || els.assetBox.style.display === "none") {
+                els.start.textContent = els.mode.value === "assets" ? "Scan Assets" : "Start";
+            }
             els.stop.classList.add("disabled"); els.mode.disabled = false;
         }
     }
@@ -390,7 +368,6 @@
           
           const mdData = await buildDevDump((c,t) => { els.start.textContent = `CSS ${c}/${t}`; });
           dl(mdData, getFNTxt("AI_CONTEXT"));
-          
           toast("Dev Dump Saved!");
           toggleControls("idle");
         } else if(mode === "self") {
@@ -400,6 +377,12 @@
           const res = await processImages(document.documentElement.outerHTML, lim, ac.signal, (c,t) => els.start.textContent = `Img ${c}/${t}`);
           if(res.stopped) {
              partialRes = res.html; els.mainBtns.style.display = "none";
+             els.partials.style.display = "flex"; toast("Stopped.");
+          } else {
+             dl(res.html, getFN("self")); toast("Done!"); toggleControls("idle");
+          }
+        } else if(mode === "assets") {
+          // --- ASSET INSPECTOR MODE ---
     // ---------- Logic Binding ----------
     const els = {
       fab: wrap.querySelector("#hx_fab"),
