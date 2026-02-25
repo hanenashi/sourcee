@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      4.0
-// @description  The ultimate HTML export tool. (Asset Inspector + Smart Checkbox Management)
+// @version      4.1
+// @description  The ultimate HTML export tool. (Auto-Rescue Offscreen Button + Drag Fences)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
@@ -38,21 +38,13 @@
     // ---------- Scaling Setup ----------
     const STORE_SCALE = "hx_scale_" + location.hostname;
     let isTouch = false;
-    
-    try { 
-        isTouch = matchMedia("(pointer: coarse)").matches; 
-    } catch (e) {
-        // Ignored
-    }
+    try { isTouch = matchMedia("(pointer: coarse)").matches; } catch (e) {}
 
     let uiScale = 1.0;
     try {
       const saved = parseFloat(localStorage.getItem(STORE_SCALE));
-      if (!isNaN(saved) && saved > 0) {
-          uiScale = saved;
-      } else {
-          uiScale = isTouch ? 1.35 : 1.0;
-      }
+      if (!isNaN(saved) && saved > 0) uiScale = saved;
+      else uiScale = isTouch ? 1.35 : 1.0;
     } catch (e) {
       uiScale = isTouch ? 1.35 : 1.0;
     }
@@ -81,12 +73,10 @@
       ".hx_field,.hx_select{width:100%;box-sizing:border-box;padding:calc(10px*var(--hx_scale));border-radius:8px;" +
       "border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.3);" +
       "color:#fff;outline:none;font-size:calc(13px*var(--hx_scale));}\n" +
-      
       ".hx_select{appearance:auto;}\n" +
       ".hx_select option{background:#333;}\n" +
 
       ".hx_row{display:flex;gap:calc(8px*var(--hx_scale));}\n" +
-      
       ".hx_btn{flex:1;padding:calc(10px*var(--hx_scale));border-radius:8px;border:1px solid rgba(255,255,255,0.12);" +
       "background:rgba(255,255,255,0.08);color:#eee;cursor:pointer;" +
       "text-align:center;font-weight:600;transition:all 0.2s;}\n" +
@@ -97,10 +87,8 @@
       "color:#fff!important;opacity:1!important;pointer-events:none;animation:hx_pulse 1.5s infinite ease-in-out;}\n" +
       "@keyframes hx_pulse{0%{opacity:1;}50%{opacity:0.7;}100%{opacity:1;}}\n" +
 
-      /* Asset Inspector Checklist Styles */
       "#hx_asset_ctrls{display:none;gap:calc(6px*var(--hx_scale));margin-bottom:calc(-4px*var(--hx_scale));flex-wrap:wrap;}\n" +
       ".hx_actrl{padding:3px 6px;border-radius:4px;font-weight:bold;font-size:calc(10px*var(--hx_scale));cursor:pointer;background:rgba(255,255,255,0.15);color:#fff;display:inline-flex;align-items:center;}\n" +
-      ".hx_actrl:active{background:rgba(255,255,255,0.3);}\n" +
       ".hx_actrl.css{background:#2962ff;}\n" +
       ".hx_actrl.js{background:#ffd600;color:#000;}\n" +
       ".hx_actrl.html{background:#ff4081;}\n" +
@@ -208,38 +196,20 @@
     function getCleanDOM() {
         const clone = document.documentElement.cloneNode(true);
         const sourceeMenu = clone.querySelector("#hx_wrap");
-        if (sourceeMenu) {
-            sourceeMenu.remove();
-        }
+        if (sourceeMenu) sourceeMenu.remove();
         const sourceeToast = clone.querySelector("#hx_toast");
-        if (sourceeToast) {
-            sourceeToast.remove();
-        }
+        if (sourceeToast) sourceeToast.remove();
 
         clone.querySelectorAll("script, noscript, iframe, canvas, video, audio, picture").forEach(e => e.remove());
-        clone.querySelectorAll("svg").forEach(e => { 
-            if (e.innerHTML.length > 200) {
-                e.innerHTML = ""; 
-            }
-        });
-        
+        clone.querySelectorAll("svg").forEach(e => { if (e.innerHTML.length > 200) e.innerHTML = ""; });
         clone.querySelectorAll("img, source").forEach(e => {
-            if (e.src && e.src.startsWith("data:")) {
-                e.removeAttribute("src");
-            }
-            if (e.srcset) {
-                e.removeAttribute("srcset");
-            }
+            if (e.src && e.src.startsWith("data:")) e.removeAttribute("src");
+            if (e.srcset) e.removeAttribute("srcset");
         });
-
         clone.querySelectorAll('input[type="hidden"]').forEach(e => e.remove());
         clone.querySelectorAll('input:not([type="hidden"]), textarea').forEach(e => {
-            if (e.hasAttribute('value')) {
-                e.setAttribute('value', '[REDACTED]');
-            }
-            if (e.tagName.toLowerCase() === 'textarea') {
-                e.textContent = '[REDACTED]';
-            }
+            if (e.hasAttribute('value')) e.setAttribute('value', '[REDACTED]');
+            if (e.tagName.toLowerCase() === 'textarea') e.textContent = '[REDACTED]';
         });
         return clone.outerHTML;
     }
@@ -257,27 +227,17 @@
                 Array.from(s.attributes).forEach(attr => {
                     if (attr.name.startsWith('data-')) ident.push(`${attr.name}="${attr.value}"`);
                 });
-
                 let attrString = ident.length > 0 ? ` [${ident.join(", ")}]` : " [Anonymous/Inline]";
                 let origin = "Vanilla Site / Unknown";
                 let originTag = "";
-                
-                if (s.id && s.id.toLowerCase().includes("stylus")) { 
-                    origin = "Stylus Theme"; originTag = "🎨 "; 
-                } else if (s.className && s.className.toLowerCase().includes("stylus")) { 
-                    origin = "Stylus Theme"; originTag = "🎨 "; 
-                } else if (css.includes("display: none !important") && css.length > 500) { 
-                    origin = "AdBlocker / Anti-Tracker"; originTag = "🛡️ "; 
-                } else if (css.includes("--hx_scale")) { 
-                    origin = "Sourcee Userscript"; originTag = "⚙️ "; 
-                } else if (s.parentElement && s.parentElement.tagName.toLowerCase() === 'body') { 
-                    origin = "Injected into <body> (Likely Userscript)"; originTag = "💉 "; 
-                }
-
+                if (s.id && s.id.toLowerCase().includes("stylus")) { origin = "Stylus Theme"; originTag = "🎨 "; }
+                else if (s.className && s.className.toLowerCase().includes("stylus")) { origin = "Stylus Theme"; originTag = "🎨 "; }
+                else if (css.includes("display: none !important") && css.length > 500) { origin = "AdBlocker / Anti-Tracker"; originTag = "🛡️ "; }
+                else if (css.includes("--hx_scale")) { origin = "Sourcee Userscript"; originTag = "⚙️ "; }
+                else if (s.parentElement && s.parentElement.tagName.toLowerCase() === 'body') { origin = "Injected into <body> (Likely Userscript)"; originTag = "💉 "; }
                 md += `\n### Style Block ${i + 1} - ${originTag}${origin}${attrString}\n\`\`\`css\n${css}\n\`\`\`\n`;
             }
         });
-
         md += `\n## 2. EXTERNAL STYLESHEETS (<link rel="stylesheet">)\n`;
         const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
         for (let i = 0; i < links.length; i++) {
@@ -288,11 +248,8 @@
             try {
                 const cssText = await fetchCors(href);
                 md += `\`\`\`css\n${cssText.trim()}\n\`\`\`\n`;
-            } catch(e) { 
-                md += `> [Failed to fetch: CORS or network error]\n`; 
-            }
+            } catch(e) { md += `> [Failed to fetch: CORS or network error]\n`; }
         }
-
         md += `\n## 3. DOM SNAPSHOT (Sanitized for AI Context)\n`;
         md += `\`\`\`html\n${beautify(getCleanDOM())}\n\`\`\`\n`;
         return md;
@@ -300,9 +257,7 @@
 
     // ---------- Self-Contained Logic ----------
     async function fetchBase64(url, signal) {
-      if(signal?.aborted) {
-          throw new Error("STOP");
-      }
+      if(signal?.aborted) throw new Error("STOP");
       const r = await fetch(url, {signal, cache:"no-store", credentials:"include"});
       const b = await r.blob();
       return new Promise((res,rej)=>{
@@ -321,9 +276,7 @@
       let count = 0;
       for(const img of imgs) {
         if(count >= total) break;
-        if(signal?.aborted) {
-            return {html:doc.documentElement.outerHTML, stopped:true};
-        }
+        if(signal?.aborted) return {html:doc.documentElement.outerHTML, stopped:true};
         try {
           const abs = new URL(img.getAttribute("src"), location.href).href;
           const b64 = await fetchBase64(abs, signal);
@@ -331,12 +284,9 @@
           img.removeAttribute("srcset"); 
           img.removeAttribute("loading");
         } catch(e) { 
-          if(signal?.aborted) {
-              return {html:doc.documentElement.outerHTML, stopped:true};
-          }
+          if(signal?.aborted) return {html:doc.documentElement.outerHTML, stopped:true};
         }
-        count++; 
-        onProg(count, total);
+        count++; onProg(count, total);
       }
       return {html:doc.documentElement.outerHTML, stopped:false};
     }
@@ -354,7 +304,7 @@
           <option value="pretty">Beautify Fetch (.html)</option>
           <option value="self">Self-Contained Img (.html)</option>
           <option value="devdump">AI Context Dump (.md)</option>
-          <option value="assets">Asset Inspector (Network)</option>
+          <option value="assets">Asset Inspector (.js/.css)</option>
         </select>
         
         <div id="hx_asset_ctrls">
@@ -416,23 +366,15 @@
       const steps = [1.0, 1.15, 1.35, 1.5, 1.7];
       let idx = 0;
       for (let i = 0; i < steps.length; i++) {
-        if (Math.abs(steps[i] - uiScale) < 0.02) { 
-            idx = i; 
-            break; 
-        }
+        if (Math.abs(steps[i] - uiScale) < 0.02) { idx = i; break; }
       }
       uiScale = steps[(idx + 1) % steps.length];
       document.documentElement.style.setProperty("--hx_scale", String(uiScale));
       els.scale.textContent = `UI: ${Math.round(uiScale * 100)}%`;
-      try { 
-          localStorage.setItem(STORE_SCALE, String(uiScale)); 
-      } catch (e) {
-          // Ignored
-      }
+      try { localStorage.setItem(STORE_SCALE, String(uiScale)); } catch (e2) {}
       toast(`UI scaled to ${Math.round(uiScale * 100)}%`);
     };
 
-    // Asset Box Mode Reset
     els.mode.addEventListener("change", () => {
         els.assetBox.style.display = "none";
         els.assetCtrls.style.display = "none";
@@ -444,7 +386,6 @@
         }
     });
 
-    // Update Download Button dynamically when clicking checkboxes
     els.assetBox.addEventListener("change", (e) => {
         if (e.target.tagName === "INPUT") {
             const count = els.assetBox.querySelectorAll('input:checked').length;
@@ -452,19 +393,16 @@
         }
     });
 
-    // Smart Selection Button Logic
     els.assetCtrls.addEventListener("click", (e) => {
         if (!e.target.classList.contains("hx_actrl")) return;
         const sel = e.target.getAttribute("data-sel");
         const boxes = els.assetBox.querySelectorAll('input[type="checkbox"]');
-        
         boxes.forEach(b => {
             if (sel === "all") {
                 b.checked = true;
             } else if (sel === "none") {
                 b.checked = false;
             } else {
-                // If they clicked JS, only check JS, etc.
                 if (b.getAttribute("data-type") === sel) {
                     b.checked = true;
                 } else {
@@ -472,25 +410,18 @@
                 }
             }
         });
-
-        // Trigger the counter update manually
         const count = els.assetBox.querySelectorAll('input:checked').length;
         els.start.textContent = `Download (${count})`;
     });
 
-    function getFN(suffix) { 
-        return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`; 
-    }
-    
-    function getFNTxt(suffix) { 
-        return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.md`; 
-    }
+    function getFN(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.html`; }
+    function getFNTxt(suffix) { return `${els.name.value}_${suffix}${useTs ? "_"+ts() : ""}.md`; }
 
     function toggleControls(state) {
         if (state === "running") {
             els.stop.classList.remove("disabled"); 
             els.mode.disabled = true;
-            els.assetCtrls.style.pointerEvents = "none"; // Disable smart buttons during download
+            els.assetCtrls.style.pointerEvents = "none"; 
             els.assetCtrls.style.opacity = "0.5";
         } else {
             els.start.classList.remove("disabled", "working");
@@ -505,9 +436,7 @@
     }
 
     els.start.onclick = async () => {
-      if (els.start.classList.contains("working") || els.start.classList.contains("disabled")) {
-          return;
-      }
+      if (els.start.classList.contains("working") || els.start.classList.contains("disabled")) return;
       const mode = els.mode.value;
       const lim = parseInt(els.limit.value) || 0;
       
@@ -528,7 +457,6 @@
           toggleControls("running");
           els.start.classList.add("working");
           els.start.textContent = "Scraping...";
-          
           const mdData = await buildDevDump((c,t) => { els.start.textContent = `CSS ${c}/${t}`; });
           dl(mdData, getFNTxt("AI_CONTEXT"));
           toast("Dev Dump Saved!");
@@ -539,7 +467,6 @@
           toggleControls("running");
           els.start.classList.add("working"); 
           els.start.textContent = "Prep...";
-
           const res = await processImages(document.documentElement.outerHTML, lim, ac.signal, (c,t) => els.start.textContent = `Img ${c}/${t}`);
           if(res.stopped) {
              partialRes = res.html; 
@@ -553,59 +480,40 @@
           }
           
         } else if(mode === "assets") {
-          // --- ASSET INSPECTOR MODE ---
           if (els.assetBox.style.display === "none" || els.assetBox.innerHTML === "") {
-              // 1. SCAN PHASE
+              // SCAN PHASE
               let assets = [];
-              
               document.querySelectorAll('link[rel="stylesheet"]').forEach(el => {
                   if (el.href) assets.push({ type: 'css', badge: 'css', url: el.href });
               });
-              
               document.querySelectorAll('script[src]').forEach(el => {
                   if (el.src) assets.push({ type: 'js', badge: 'js', url: el.src });
               });
-              
               document.querySelectorAll('iframe[src]').forEach(el => {
                   if (el.src) assets.push({ type: 'html', badge: 'frm', url: el.src });
               });
               
-              if (assets.length === 0) {
-                  return toast("No external assets found.");
-              }
+              if (assets.length === 0) return toast("No external assets found.");
 
               els.assetBox.innerHTML = "";
               assets.forEach((a, i) => {
                   let urlObj;
-                  try { 
-                      urlObj = new URL(a.url, location.href); 
-                  } catch (e) {
-                      // Ignored
-                  }
-                  
+                  try { urlObj = new URL(a.url, location.href); } catch (e) {}
                   let fn = "file_" + i;
                   let domain = "unknown";
-                  
                   if (urlObj) {
                       domain = urlObj.hostname.replace(/^www\./, '');
                       let parts = urlObj.pathname.split('/');
                       fn = parts[parts.length - 1] || "index";
                   }
-                  
-                  if (fn.length > 35) {
-                      fn = fn.substring(0, 35) + "...";
-                  }
-                  
+                  if (fn.length > 35) fn = fn.substring(0, 35) + "...";
                   let safeDomain = domain.replace(/[^a-zA-Z0-9]/g, '_');
                   let saveFn = `${safeDomain}_${fn}`;
-                  if (a.type === 'html' && !saveFn.endsWith('.html')) {
-                      saveFn += ".html";
-                  }
+                  if (a.type === 'html' && !saveFn.endsWith('.html')) saveFn += ".html";
                   
                   let lbl = document.createElement("label");
                   lbl.className = "hx_asset_item";
                   lbl.title = a.url; 
-                  // Adding data-type attribute here makes the Smart Selection buttons work instantly
                   lbl.innerHTML = `
                     <input type="checkbox" checked data-url="${a.url}" data-fn="${saveFn}" data-type="${a.type}">
                     <span class="hx_badge ${a.type}">${a.badge}</span> 
@@ -618,12 +526,9 @@
               els.assetBox.style.display = "flex";
               els.start.textContent = `Download (${assets.length})`;
           } else {
-              // 2. DOWNLOAD PHASE
+              // DOWNLOAD PHASE
               let checks = Array.from(els.assetBox.querySelectorAll('input:checked'));
-              if (checks.length === 0) {
-                  return toast("No assets selected.");
-              }
-
+              if (checks.length === 0) return toast("No assets selected.");
               ac = new AbortController();
               toggleControls("running");
               els.start.classList.add("working");
@@ -631,22 +536,16 @@
               let chain = Promise.resolve();
               checks.forEach((chk, idx) => {
                   chain = chain.then(() => {
-                      if (ac && ac.signal.aborted) {
-                          throw new Error("STOP");
-                      }
+                      if (ac && ac.signal.aborted) throw new Error("STOP");
                       els.start.textContent = `Fetching ${idx + 1}/${checks.length}`;
                       let url = chk.getAttribute("data-url");
                       let fn = chk.getAttribute("data-fn"); 
-                      
                       return fetchCors(url).then(txt => {
                           dl(txt, fn);
                           return new Promise(r => setTimeout(r, 600));
-                      }).catch(e => {
-                          console.warn("Sourcee asset fail:", url, e);
-                      });
+                      }).catch(e => { console.warn("Sourcee asset fail:", url, e); });
                   });
               });
-
               chain.then(() => {
                   toast("Assets Downloaded!");
                   toggleControls("idle");
@@ -658,56 +557,46 @@
               });
           }
         }
-      } catch(e) { 
-          toast("Error: " + e.message); 
-          toggleControls("idle"); 
-      }
+      } catch(e) { toast("Error: " + e.message); toggleControls("idle"); }
     };
 
     els.stop.onclick = () => ac?.abort();
-    
-    els.saveP.onclick = () => { 
-        if(partialRes) {
-            dl(partialRes, getFN("partial")); 
-        }
-        resetPartials(); 
-    };
-    
+    els.saveP.onclick = () => { if(partialRes) dl(partialRes, getFN("partial")); resetPartials(); };
     els.discP.onclick = resetPartials;
-    
-    function resetPartials() { 
-        partialRes = null; 
-        ac = null; 
-        els.partials.style.display = "none"; 
-        els.mainBtns.style.display = "flex"; 
-        toggleControls("idle"); 
-    }
+    function resetPartials() { partialRes = null; ac = null; els.partials.style.display = "none"; els.mainBtns.style.display = "flex"; toggleControls("idle"); }
 
-    // ---------- Draggable Logic ----------
+    // ---------- Draggable Logic with AUTO-RESCUE ----------
     let isDrag = false, startX, startY, sL, sT; 
     const store = "hx_pos_"+location.hostname;
     
+    // Auto-Rescue: Check if button is off-screen on load
     try { 
-        const p=JSON.parse(localStorage.getItem(store)); 
-        if(p) { 
-            wrap.style.left = p.x + "px"; 
-            wrap.style.top = p.y + "px"; 
-            wrap.style.right = "auto"; 
-            wrap.style.bottom = "auto"; 
+        const p = JSON.parse(localStorage.getItem(store)); 
+        if(p && isFinite(p.x) && isFinite(p.y)) { 
+            // Safety check: is it within current viewport?
+            const winW = window.innerWidth;
+            const winH = window.innerHeight;
+            // 50px buffer zone
+            if (p.x < -10 || p.x > winW - 20 || p.y < -10 || p.y > winH - 20) {
+                 // Reset to default if out of bounds
+                 console.log("Sourcee: Position reset (off-screen)");
+                 wrap.style.right = "12px"; 
+                 wrap.style.bottom = "80px";
+                 wrap.style.left = "auto";
+                 wrap.style.top = "auto";
+                 localStorage.removeItem(store); // Clear bad data
+            } else {
+                 wrap.style.left = p.x + "px"; 
+                 wrap.style.top = p.y + "px"; 
+                 wrap.style.right = "auto"; 
+                 wrap.style.bottom = "auto"; 
+            }
         } 
-    } catch(e) {
-        // Ignored
-    }
+    } catch(e) {}
     
     els.fab.addEventListener("pointerdown", e => {
       if(e.button !== 0) return; 
-      
-      try {
-          els.fab.setPointerCapture(e.pointerId);
-      } catch (e) {
-          // Ignored
-      }
-      
+      try { els.fab.setPointerCapture(e.pointerId); } catch (e) {}
       isDrag = false; 
       startX = e.clientX; 
       startY = e.clientY;
@@ -717,11 +606,7 @@
     });
     
     els.fab.addEventListener("pointermove", e => {
-      try {
-          if(!els.fab.hasPointerCapture(e.pointerId)) return;
-      } catch (e) {
-          // Ignored
-      }
+      try { if(!els.fab.hasPointerCapture(e.pointerId)) return; } catch (e) {}
       
       const dx = e.clientX - startX;
       const dy = e.clientY - startY;
@@ -732,27 +617,32 @@
           wrap.style.bottom = "auto";
       }
       if (isDrag) {
-          wrap.style.left = (sL + dx) + "px"; 
-          wrap.style.top = (sT + dy) + "px";
+          // CLAMPING: Prevent dragging off-screen
+          const winW = window.innerWidth;
+          const winH = window.innerHeight;
+          const rect = wrap.getBoundingClientRect();
+          
+          let newLeft = sL + dx;
+          let newTop = sT + dy;
+          
+          // Keep 10px buffer from edges
+          newLeft = Math.max(10, Math.min(winW - rect.width - 10, newLeft));
+          newTop = Math.max(10, Math.min(winH - rect.height - 10, newTop));
+
+          wrap.style.left = newLeft + "px"; 
+          wrap.style.top = newTop + "px";
       }
     });
     
     els.fab.addEventListener("pointerup", e => {
-      try { 
-          els.fab.releasePointerCapture(e.pointerId); 
-      } catch(err) {
-          // Ignored
-      }
-      
+      try { els.fab.releasePointerCapture(e.pointerId); } catch(err) {}
       if(isDrag) {
           try {
               localStorage.setItem(store, JSON.stringify({
                   x: parseFloat(wrap.style.left), 
                   y: parseFloat(wrap.style.top)
               }));
-          } catch (e) {
-              // Ignored
-          }
+          } catch (e) {}
       } else {
           els.menu.classList.toggle("show");
       }
@@ -760,13 +650,8 @@
     });
 
     els.fab.addEventListener("pointercancel", e => {
-      try { 
-          els.fab.releasePointerCapture(e.pointerId); 
-      } catch(err) {
-          // Ignored
-      }
+      try { els.fab.releasePointerCapture(e.pointerId); } catch(err) {}
       isDrag = false;
     });
   }
 })();
-            
