@@ -2,7 +2,7 @@
 
 The ultimate HTML export and web reverse-engineering tool. Capture, beautify, inspect assets, and generate AI-ready context dumps directly from your browser.
 
-**v4.0 - Advanced Asset Inspector & AI Context Dumps**
+**v4.2 - Safer Asset Inspector, Cancelable Downloads & AI Context Dumps**
 
 ## 📥 Installation
 
@@ -30,6 +30,7 @@ Easily rip a site's building blocks to reconstruct it locally.
 * Displays the originating domain for every file.
 * **Smart Selection:** One-click buttons to isolate CSS, JS, or Iframes.
 * Downloads files safely with their domain names prefixed so nothing overwrites.
+* Safer asset list rendering protects the Sourcee panel from unusual page-provided URLs and filenames.
 
 ### 📱 Mobile Optimized
 * **Dynamic UI Scaling:** Auto-detects mobile devices and boosts UI size for easy tapping. Click the "UI" button to cycle through custom zoom levels (100% - 170%).
@@ -48,4 +49,5 @@ Easily rip a site's building blocks to reconstruct it locally.
 * **Time:** Auto-names files with the current date/time (e.g., `page_source_2023-10-27.html`).
 * **Limit:** Set a maximum number of images to embed (useful for massive infinite-scroll pages).
 * **UI:** Cycles the interface scale to perfectly match your device screen.
-* **Cancel & Save Partial:** If a huge download is taking too long, hit "Stop" and instantly save whatever has been processed so far.
+* **Cancel & Save Partial:** If a huge image embed is taking too long, hit "Stop" and instantly save whatever has been processed so far.
+* **Cancelable Asset Fetches:** Stop long asset downloads or AI context CSS scraping without waiting for the current request to finish.

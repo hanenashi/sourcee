@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Sourcee
 // @namespace    https://tampermonkey.net/
-// @version      4.1
-// @description  The ultimate HTML export tool. (Auto-Rescue Offscreen Button + Drag Fences)
+// @version      4.2
+// @description  The ultimate HTML export tool. (Safer Asset Inspector + Cancelable Downloads)
 // @match        https://*/*
 // @match        http://*/*
 // @grant        GM_addStyle
@@ -160,17 +160,71 @@
       return await r.text();
     }
     
-    function fetchCors(url) {
+    function makeStopError() {
+        return new Error("STOP");
+    }
+
+    function isStopError(err) {
+        return err && err.message === "STOP";
+    }
+
+    function wait(ms, signal) {
+        return new Promise((resolve, reject) => {
+            if (signal?.aborted) return reject(makeStopError());
+            const t = setTimeout(() => {
+                if (signal) signal.removeEventListener("abort", abortWait);
+                resolve();
+            }, ms);
+            function abortWait() {
+                clearTimeout(t);
+                reject(makeStopError());
+            }
+            if (signal) signal.addEventListener("abort", abortWait, { once: true });
+        });
+    }
+
+    function fetchCors(url, signal) {
         return new Promise((resolve, reject) => {
             if (typeof GM_xmlhttpRequest === "undefined") {
-                return reject("GM_xmlhttpRequest not granted");
+                return reject(new Error("GM_xmlhttpRequest not granted"));
             }
-            GM_xmlhttpRequest({
+
+            if (signal?.aborted) {
+                return reject(makeStopError());
+            }
+
+            let done = false;
+            let req = null;
+            function finish(fn, value) {
+                if (done) return;
+                done = true;
+                if (signal) signal.removeEventListener("abort", abortReq);
+                fn(value);
+            }
+            function abortReq() {
+                try { req?.abort(); } catch (e) {}
+                finish(reject, makeStopError());
+            }
+
+            req = GM_xmlhttpRequest({
                 method: "GET",
                 url: url,
-                onload: (res) => resolve(res.responseText),
-                onerror: (err) => reject(err)
+                onload: (res) => {
+                    if (signal?.aborted) return finish(reject, makeStopError());
+                    if (res.status && (res.status < 200 || res.status >= 400)) {
+                        return finish(reject, new Error("HTTP " + res.status));
+                    }
+                    finish(resolve, res.responseText);
+                },
+                onerror: () => finish(reject, new Error("Network error")),
+                onabort: () => finish(reject, makeStopError()),
+                ontimeout: () => finish(reject, new Error("Timeout"))
             });
+
+            if (signal) {
+                signal.addEventListener("abort", abortReq, { once: true });
+                if (signal.aborted) abortReq();
+            }
         });
     }
 
@@ -214,7 +268,7 @@
         return clone.outerHTML;
     }
 
-    async function buildDevDump(onProg) {
+    async function buildDevDump(onProg, signal) {
         let md = `# AI DEV DUMP: ${location.href}\n\n`;
         md += `## 1. INLINE & INJECTED STYLES (<style>)\n`;
         const styles = document.querySelectorAll("style");
@@ -241,14 +295,18 @@
         md += `\n## 2. EXTERNAL STYLESHEETS (<link rel="stylesheet">)\n`;
         const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
         for (let i = 0; i < links.length; i++) {
+            if (signal?.aborted) throw makeStopError();
             onProg(i + 1, links.length);
             const href = links[i].href;
             if (!href) continue;
             md += `\n### Stylesheet: ${href}\n`;
             try {
-                const cssText = await fetchCors(href);
+                const cssText = await fetchCors(href, signal);
                 md += `\`\`\`css\n${cssText.trim()}\n\`\`\`\n`;
-            } catch(e) { md += `> [Failed to fetch: CORS or network error]\n`; }
+            } catch(e) {
+                if (isStopError(e)) throw e;
+                md += `> [Failed to fetch: CORS or network error]\n`;
+            }
         }
         md += `\n## 3. DOM SNAPSHOT (Sanitized for AI Context)\n`;
         md += `\`\`\`html\n${beautify(getCleanDOM())}\n\`\`\`\n`;
@@ -257,7 +315,7 @@
 
     // ---------- Self-Contained Logic ----------
     async function fetchBase64(url, signal) {
-      if(signal?.aborted) throw new Error("STOP");
+      if(signal?.aborted) throw makeStopError();
       const r = await fetch(url, {signal, cache:"no-store", credentials:"include"});
       const b = await r.blob();
       return new Promise((res,rej)=>{
@@ -454,12 +512,14 @@
           dl(beautify(await fetchTxt(location.href)), getFN("pretty"));
           
         } else if(mode === "devdump") {
+          ac = new AbortController();
           toggleControls("running");
           els.start.classList.add("working");
           els.start.textContent = "Scraping...";
-          const mdData = await buildDevDump((c,t) => { els.start.textContent = `CSS ${c}/${t}`; });
+          const mdData = await buildDevDump((c,t) => { els.start.textContent = `CSS ${c}/${t}`; }, ac.signal);
           dl(mdData, getFNTxt("AI_CONTEXT"));
           toast("Dev Dump Saved!");
+          ac = null;
           toggleControls("idle");
           
         } else if(mode === "self") {
@@ -476,6 +536,7 @@
           } else {
              dl(res.html, getFN("self")); 
              toast("Done!"); 
+             ac = null;
              toggleControls("idle");
           }
           
@@ -514,11 +575,28 @@
                   let lbl = document.createElement("label");
                   lbl.className = "hx_asset_item";
                   lbl.title = a.url; 
-                  lbl.innerHTML = `
-                    <input type="checkbox" checked data-url="${a.url}" data-fn="${saveFn}" data-type="${a.type}">
-                    <span class="hx_badge ${a.type}">${a.badge}</span> 
-                    <span><span class="hx_domain">[${domain}]</span> ${fn}</span>
-                  `;
+
+                  const chk = document.createElement("input");
+                  chk.type = "checkbox";
+                  chk.checked = true;
+                  chk.dataset.url = a.url;
+                  chk.dataset.fn = saveFn;
+                  chk.dataset.type = a.type;
+
+                  const badge = document.createElement("span");
+                  badge.className = `hx_badge ${a.type}`;
+                  badge.textContent = a.badge;
+
+                  const nameWrap = document.createElement("span");
+                  const domainEl = document.createElement("span");
+                  domainEl.className = "hx_domain";
+                  domainEl.textContent = `[${domain}]`;
+                  nameWrap.appendChild(domainEl);
+                  nameWrap.appendChild(document.createTextNode(" " + fn));
+
+                  lbl.appendChild(chk);
+                  lbl.appendChild(badge);
+                  lbl.appendChild(nameWrap);
                   els.assetBox.appendChild(lbl);
               });
               
@@ -534,30 +612,41 @@
               els.start.classList.add("working");
               
               let chain = Promise.resolve();
+              let failed = 0;
               checks.forEach((chk, idx) => {
                   chain = chain.then(() => {
-                      if (ac && ac.signal.aborted) throw new Error("STOP");
+                      if (ac && ac.signal.aborted) throw makeStopError();
                       els.start.textContent = `Fetching ${idx + 1}/${checks.length}`;
-                      let url = chk.getAttribute("data-url");
-                      let fn = chk.getAttribute("data-fn"); 
-                      return fetchCors(url).then(txt => {
+                      let url = chk.dataset.url;
+                      let fn = chk.dataset.fn;
+                      return fetchCors(url, ac.signal).then(txt => {
                           dl(txt, fn);
-                          return new Promise(r => setTimeout(r, 600));
-                      }).catch(e => { console.warn("Sourcee asset fail:", url, e); });
+                          return wait(600, ac.signal);
+                      }).catch(e => {
+                          if (isStopError(e)) throw e;
+                          failed++;
+                          console.warn("Sourcee asset fail:", url, e);
+                      });
                   });
               });
               chain.then(() => {
-                  toast("Assets Downloaded!");
+                  toast(failed ? `Done. ${failed} failed.` : "Assets Downloaded!");
+                  ac = null;
                   toggleControls("idle");
                   els.start.textContent = `Download (${checks.length})`;
               }).catch(e => {
-                  toast("Stopped.");
+                  toast(isStopError(e) ? "Stopped." : "Some assets failed.");
+                  ac = null;
                   toggleControls("idle");
                   els.start.textContent = `Download (${checks.length})`;
               });
           }
         }
-      } catch(e) { toast("Error: " + e.message); toggleControls("idle"); }
+      } catch(e) {
+        toast(isStopError(e) ? "Stopped." : "Error: " + e.message);
+        ac = null;
+        toggleControls("idle");
+      }
     };
 
     els.stop.onclick = () => ac?.abort();
